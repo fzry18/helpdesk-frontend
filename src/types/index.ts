@@ -1,0 +1,238 @@
+// Employee - Primary authentication entity (employee-only auth)
+export interface Employee {
+  id: number
+  name: string
+  nik: string
+  helpdesk_username: string
+  department_id: number | null
+  department: string
+  job_title: string
+  email: string
+  phone: string
+  is_manager?: boolean
+}
+
+export interface LoginRequest {
+  login: string  // 4 digit terakhir NIK
+  password: string
+}
+
+export interface LoginResponse {
+  success: boolean
+  data: {
+    access_token: string
+    token_type: string
+    expires_in: number
+    employee: Employee
+  }
+}
+
+export interface Ticket {
+  id: number
+  ticket_number: string
+  subject: string
+  description: string
+  priority: string | boolean
+  priority_label?: string
+  /** helper = Ticketing Helper (manpower/field), system = Ticketing System (Odoo/P2H/Job Portal) */
+  ticket_category_type?: "helper" | "system"
+  /** Hanya untuk ticket_category_type=system: odoo | p2h | job_portal | other */
+  system_category?: string | null
+  /** Admin sudah selesai, menunggu user konfirmasi */
+  waiting_user_confirmation?: boolean
+  resolution_confirmed?: boolean
+  stage?: { id: number; name: string } | null
+  team?: { id: number; name: string } | null
+  category?: { id: number; name: string } | null
+  ticket_type?: { id: number; name: string } | null
+  customer?: { id: number; name: string; email: string; phone: string } | null
+  assigned_user?: { id: number; name: string } | null
+  created_by?: { id: number; name: string } | null
+  stage_id?: number
+  stage_name?: string
+  team_id?: number
+  team_name?: string
+  category_id?: number
+  category_name?: string
+  ticket_type_id?: number
+  ticket_type_name?: string
+  customer_id?: number
+  customer_name?: string
+  email?: string
+  phone?: string
+  assigned_user_id?: number
+  assigned_user_name?: string
+  create_date: string
+  write_date: string
+  start_date?: string | null
+  end_date?: string | null
+  user_confirmation_request_date?: string | null
+  confirmation_date?: string | null
+  captured_url?: string
+  captured_module?: string
+  captured_model?: string
+  captured_model_name?: string
+  captured_view_type?: string
+  captured_menu_path?: string
+  captured_record_id?: number | null
+  captured_record_ref?: string
+  captured_browser?: string
+  captured_at?: string
+  is_from_floating_button?: boolean
+  total_time_spent?: number
+  tags?: any[]
+  products?: any[]
+  attachments?: any[]
+}
+
+export interface Message {
+  id: number
+  body: string
+  body_plain?: string
+  author: {
+    id: number
+    name: string
+    email?: string
+    image_url?: string
+  } | null
+  date?: string
+  create_date?: string
+  message_type?: string
+  is_internal?: boolean
+  internal?: boolean
+}
+
+export interface ApiResponse<T> {
+  success: boolean
+  data: T
+  message?: string
+  meta?: {
+    page: number
+    limit: number
+    total: number
+    total_pages: number
+    has_next: boolean
+    has_prev: boolean
+  }
+}
+
+export interface Department {
+  id: number
+  name: string
+}
+
+export interface MasterData {
+  categories: Category[]
+  types: TicketType[]
+  teams: Team[]
+  stages: Stage[]
+  tags: Tag[]
+  priorities: Priority[]
+  departments?: Department[]
+}
+
+export interface Category {
+  id: number
+  name: string
+  sequence?: number
+}
+
+export interface TicketType {
+  id: number
+  name: string
+}
+
+export interface Team {
+  id: number
+  name: string
+  email?: string
+  leader?: { id: number; name: string } | null
+  member_count?: number
+  members?: Array<{ id: number; name: string; email?: string }>
+}
+
+export interface Stage {
+  id: number
+  name: string
+  sequence?: number
+  is_starting?: boolean
+  is_closing?: boolean
+  fold?: boolean
+}
+
+export interface Tag {
+  id: number
+  name: string
+  color?: number
+}
+
+export interface Priority {
+  value: string
+  label: string
+}
+
+export interface Attachment {
+  id: number
+  name: string
+  filename?: string
+  mimetype: string
+  file_size: number
+  checksum?: string
+  url: string
+  preview_url?: string | null
+  create_date?: string | null
+  created_by?: { id: number; name: string } | null
+}
+
+export interface User {
+  id: number
+  name: string
+  email?: string
+  image_url?: string | null
+}
+
+// Dashboard types
+export interface DashboardSummary {
+  summary: {
+    total: number
+    open: number
+    closed: number
+    unassigned: number
+  }
+  period: {
+    today: number
+    this_week: number
+    this_month: number
+  }
+  by_priority: {
+    very_low: number
+    low: number
+    normal: number
+    high: number
+    very_high: number
+  }
+  by_stage: Array<{ id: number; name: string; count: number }>
+}
+
+export interface TrendData {
+  date: string
+  count: number
+}
+
+export interface TeamPerformance {
+  team: { id: number; name: string }
+  summary: {
+    total: number
+    open: number
+    closed: number
+    member_count: number
+  }
+  members: Array<{
+    id: number
+    name: string
+    assigned: number
+    closed: number
+    open: number
+  }>
+}
+
