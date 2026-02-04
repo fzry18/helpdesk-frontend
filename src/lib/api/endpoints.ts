@@ -115,6 +115,12 @@ export const ticketAPI = {
       user_id: userId,
     }),
 
+  /** Admin: Assign by employee (nama yang mengerjakan) - tidak wajib punya User di Odoo */
+  assignByEmployee: (id: number, employeeId: number) =>
+    apiClient.put<ApiResponse<Ticket>>(`/tickets/${id}/assign`, {
+      employee_id: employeeId,
+    }),
+
   assignToMe: (id: number) =>
     apiClient.put<ApiResponse<Ticket>>(`/tickets/${id}/assign`, {
       assign_to_me: true,
@@ -137,6 +143,34 @@ export const ticketAPI = {
     data?: { satisfaction?: string; feedback?: string }
   ) =>
     apiClient.post<ApiResponse<Ticket>>(`/tickets/${id}/confirm-resolved`, data || {}),
+
+  // ============================================
+  // NEW WORKFLOW ENDPOINTS (sesuai BACKEND_SPEC_WORKFLOW.md)
+  // ============================================
+
+  /** Admin: Open/Progress ticket (Draft → In Progress) */
+  openTicket: (id: number, message?: string) =>
+    apiClient.post<ApiResponse<Ticket>>(`/tickets/${id}/open`, {
+      message: message || "",
+    }),
+
+  /** Admin: Assign ticket ke team helpdesk */
+  assignTeam: (id: number, teamId: number, message?: string) =>
+    apiClient.post<ApiResponse<{ id: number; team: { id: number; name: string } }>>(
+      `/tickets/${id}/assign-team`,
+      { team_id: teamId, message: message || "" }
+    ),
+
+  /** Admin: Post activity log (progress update dari manpower) */
+  postActivityLog: (
+    id: number,
+    content: string,
+    activityType?: "progress" | "note" | "update"
+  ) =>
+    apiClient.post<ApiResponse<{ id: number; content: string; activity_type: string; create_date: string }>>(
+      `/tickets/${id}/activity-log`,
+      { content, activity_type: activityType || "progress" }
+    ),
 
   search: (body: {
     filters?: Array<{ field: string; operator: string; value: string }>
@@ -253,6 +287,20 @@ interface User {
   email?: string
 }
 
+/** Team member type - sekarang adalah hr.employee */
+interface TeamMember {
+  id: number
+  employee_id: number
+  name: string
+  nik?: string
+  email?: string
+  phone?: string
+  department_id?: number | null
+  department_name?: string | null
+  job_title?: string
+  user_id?: number | null
+}
+
 export const masterDataAPI = {
   getAll: () => apiClient.get<ApiResponse<MasterData>>("/master-data"),
 
@@ -265,6 +313,10 @@ export const masterDataAPI = {
 
   getTeam: (id: number) =>
     apiClient.get<ApiResponse<Team>>(`/teams/${id}`),
+
+  /** Get team members as hr.employee list */
+  getTeamMembers: (teamId: number) =>
+    apiClient.get<ApiResponse<TeamMember[]>>(`/teams/${teamId}/members`),
 
   getStages: () => apiClient.get<ApiResponse<Stage[]>>("/stages"),
 

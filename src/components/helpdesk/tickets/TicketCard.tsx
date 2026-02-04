@@ -160,10 +160,10 @@ export function TicketCard({ ticket }: TicketCardProps) {
                   {ticket.team?.name || ticket.team_name}
                 </div>
               )}
-              {(ticket.assigned_user?.name || ticket.assigned_user_name) && (
+              {(ticket.assigned_employee?.name || ticket.assigned_user?.name || ticket.assigned_user_name) && (
                 <div className="flex items-center gap-1">
                   <User className="h-3 w-3" />
-                  {ticket.assigned_user?.name || ticket.assigned_user_name}
+                  {ticket.assigned_employee?.name ?? ticket.assigned_user?.name ?? ticket.assigned_user_name}
                 </div>
               )}
             </div>

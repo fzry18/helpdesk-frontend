@@ -1,77 +1,57 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { ticketAPI } from "@/lib/api/endpoints"
+import { useAuthStore } from "@/store/authStore"
 import { TicketList } from "@/components/helpdesk/tickets/TicketList"
-import { TicketFilters } from "@/components/helpdesk/tickets/TicketFilters"
+import { TicketFilters, type TicketFilterValues } from "@/components/helpdesk/tickets/TicketFilters"
 import { CreateTicketDialog } from "@/components/helpdesk/tickets/CreateTicketDialog"
-import { useDebounce } from "@/hooks/use-debounce"
+import { Button } from "@/components/ui/button"
+import { Plus } from "lucide-react"
+import type { Ticket } from "@/types"
+
+function getTicketStatusGroup(ticket: Ticket): "Open" | "In Progress" | "Closed" {
+  const name = ((ticket.stage?.actual_name ?? ticket.stage?.name) ?? "").toString().toLowerCase()
+  if (name.includes("closed") || name.includes("selesai") || ticket.resolution_confirmed === true) return "Closed"
+  if (name.includes("progress") || name.includes("in progress") || name.includes("awaiting") || name.includes("confirmation") || name.includes("menunggu")) return "In Progress"
+  return "Open"
+}
 
 export default function TicketsPage() {
-  const [filters, setFilters] = useState<{
-    search?: string
-    stage_id?: number
-    team_id?: number
-    priority?: string
-    status?: "open" | "closed" | "all"
-    ticket_category_type?: "system" | "helper"
-    system_category?: string
-    my_tickets?: boolean
-  }>({
+  const isAdmin = useAuthStore((s) => s.isAdmin())
+  const [filters, setFilters] = useState<TicketFilterValues>({
     status: "all",
   })
 
-  const debouncedSearch = useDebounce(filters.search || "", 500)
-
-  console.log('=== Tickets List Page ===')
-  console.log('Filters:', filters)
-  console.log('Debounced search:', debouncedSearch)
-
   const { data, isLoading, error } = useQuery({
-    queryKey: ["tickets", { ...filters, search: debouncedSearch }],
-    queryFn: async () => {
-      try {
-        console.log('Fetching tickets with params:', {
-          ...filters,
-          search: debouncedSearch || undefined,
-        })
-        const response = await ticketAPI.list({
-          ...filters,
-          search: debouncedSearch || undefined,
-        })
-        console.log('Tickets fetched successfully:', response)
-        console.log('Total tickets:', response.data?.total)
-        return response
-      } catch (error: any) {
-        console.error('=== ERROR FETCHING TICKETS ===')
-        console.error('Error type:', error.constructor.name)
-        console.error('Error message:', error.message)
-        console.error('Error response:', error.response)
-        console.error('Error status:', error.response?.status)
-        console.error('Error data:', error.response?.data)
-        console.error('Full error:', error)
-        throw error
-      }
-    },
-    retry: false, // Disable retry untuk debugging
+    queryKey: ["tickets", "list", filters.priority, filters.ticket_category_type, isAdmin],
+    queryFn: () =>
+      ticketAPI.list({
+        status: "all",
+        priority: filters.priority,
+        ticket_category_type: filters.ticket_category_type,
+        my_tickets: !isAdmin,
+      }),
   })
 
-  // Log error state
-  if (error) {
-    console.error('Tickets list error state:', error)
-  }
-
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Tickets</h1>
-          <p className="text-muted-foreground">
-            Kelola semua ticket helpdesk Anda
+    <div className="min-w-0 space-y-4 md:space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold md:text-3xl">Tickets</h1>
+          <p className="text-sm text-muted-foreground md:text-base">
+            Kelola tiket helpdesk. Buat tiket hanya dari halaman ini.
           </p>
         </div>
-        <CreateTicketDialog />
+        <CreateTicketDialog
+          trigger={
+            <Button size="lg" className="w-full shrink-0 sm:w-auto">
+              <Plus className="mr-2 h-5 w-5" />
+              Create Ticket
+            </Button>
+          }
+        />
       </div>
 
       <TicketFilters onFilterChange={setFilters} />
@@ -94,7 +74,18 @@ export default function TicketsPage() {
       )}
 
       <TicketList
-        tickets={Array.isArray(data?.data) ? data.data : null}
+        tickets={useMemo(() => {
+          const raw = data?.data
+          let list: Ticket[] | null = null
+          if (Array.isArray(raw)) list = raw
+          else if (raw && typeof raw === "object" && "data" in raw && Array.isArray((raw as { data: Ticket[] }).data))
+            list = (raw as { data: Ticket[] }).data
+          if (!list) return null
+          if (filters.status === "open") return list.filter((t) => getTicketStatusGroup(t) === "Open")
+          if (filters.status === "in_progress") return list.filter((t) => getTicketStatusGroup(t) === "In Progress")
+          if (filters.status === "closed") return list.filter((t) => getTicketStatusGroup(t) === "Closed")
+          return list
+        }, [data?.data, filters.status])}
         isLoading={isLoading}
       />
 

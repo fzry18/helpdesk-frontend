@@ -1,6 +1,6 @@
 "use client"
 
-import { use, useRef, useEffect } from "react"
+import { use, useRef, useEffect, useMemo } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { ticketAPI, messageAPI } from "@/lib/api/endpoints"
 import { useAuthStore } from "@/store/authStore"
@@ -13,9 +13,36 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { toast } from "@/hooks/use-toast"
-import { ArrowLeft, Send, CheckCircle, MessageSquare } from "lucide-react"
+import { 
+  ArrowLeft, Send, CheckCircle, MessageSquare, ClipboardList,
+  User, Calendar, Tag, Users, Building
+} from "lucide-react"
 import Link from "next/link"
 import { Skeleton } from "@/components/ui/skeleton"
+import { TicketAdminActions } from "@/components/helpdesk/tickets/TicketAdminActions"
+
+function messageToPlainText(htmlOrEncoded: string): string {
+  if (!htmlOrEncoded) return ""
+  const textarea = document.createElement("textarea")
+  textarea.innerHTML = htmlOrEncoded
+  let text = textarea.value
+  text = text.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").trim()
+  return text
+}
+
+/** Format body activity log: pisahkan label (Progress Update, dll) dari isi agar tampilan rapi */
+function formatActivityBody(rawBody: string): { label: string | null; content: string } {
+  const text = messageToPlainText(rawBody || "").trim()
+  if (!text) return { label: null, content: "" }
+  const progressPrefix = "Progress Update"
+  if (text.toLowerCase().startsWith(progressPrefix.toLowerCase())) {
+    const rest = text.slice(progressPrefix.length).replace(/^\s*[:.\-]\s*/, "").trim()
+    return { label: "Progress Update", content: rest || text }
+  }
+  if (text.toLowerCase().includes("di-assign ke team")) return { label: null, content: text }
+  if (text.toLowerCase().includes("diproses") || text.toLowerCase().includes("dibuka")) return { label: null, content: text }
+  return { label: null, content: text }
+}
 
 const messageSchema = z.object({
   body: z.string().min(1, "Pesan tidak boleh kosong"),
@@ -23,6 +50,22 @@ const messageSchema = z.object({
 })
 
 type MessageFormData = z.infer<typeof messageSchema>
+
+interface Message {
+  id: number
+  body: string
+  body_plain?: string
+  author?: { id: number; name: string; email?: string } | null
+  date?: string
+  create_date?: string
+  is_internal?: boolean
+  message_type?: string
+  subtype_xmlid?: string
+  /** True = pesan sistem (Stage changed, IT Activity) - jangan tampilkan di Obrolan */
+  is_system_status?: boolean
+  /** True = activity log manual dari admin - tampilkan di On Progress */
+  is_activity_log?: boolean
+}
 
 export default function TicketDetailPage({
   params,
@@ -32,8 +75,9 @@ export default function TicketDetailPage({
   const { id } = use(params)
   const ticketId = parseInt(id)
   const queryClient = useQueryClient()
-  const { isManager } = useAuthStore()
+  const { isAdmin, getHelpdeskRole, employee } = useAuthStore()
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const activityEndRef = useRef<HTMLDivElement>(null)
 
   const { data: ticketData, isLoading: ticketLoading, error: ticketError } = useQuery({
     queryKey: ["ticket", ticketId],
@@ -46,19 +90,57 @@ export default function TicketDetailPage({
     enabled: !!ticketId,
   })
 
-  const messages = (threadData?.data && Array.isArray(threadData.data) ? threadData.data : []) as Array<{
-    id: number
-    body: string
-    body_plain?: string
-    author?: { id: number; name: string; email?: string } | null
-    date?: string
-    create_date?: string
-    is_internal?: boolean
-  }>
+  const allMessages = (threadData?.data && Array.isArray(threadData.data) ? threadData.data : []) as Message[]
+
+  // Pisahkan Obrolan dan Activity Log. Flag is_activity_log dari backend = pasti masuk On Progress.
+  // Pesan "Stage changed" / IT Activity disembunyikan dari Obrolan dan On Progress.
+  const { chatMessages, activityLogs } = useMemo(() => {
+    const chat: Message[] = []
+    const activity: Message[] = []
+    const bodyLower = (t: string) => messageToPlainText(t || "").toLowerCase()
+
+    for (const msg of allMessages) {
+      const bodyText = messageToPlainText(msg.body || "")
+      const lower = bodyLower(msg.body || "")
+
+      const isSystemStatus =
+        msg.is_system_status === true ||
+        lower.includes("stage changed") ||
+        lower.includes("it activity update")
+
+      if (isSystemStatus) continue
+
+      // Prioritas: flag dari backend (activity log manual admin) -> selalu On Progress
+      const isActivityLog =
+        msg.is_activity_log === true ||
+        msg.subtype_xmlid === "mail.mt_note" ||
+        bodyText.includes("Progress Update") ||
+        bodyText.includes("📋") ||
+        bodyText.includes("🔄") ||
+        bodyText.includes("👥") ||
+        (msg.is_internal &&
+          (bodyText.includes("progress") ||
+            bodyText.includes("Catatan") ||
+            bodyText.includes("di-assign") ||
+            bodyText.includes("diproses")))
+
+      if (isActivityLog) {
+        activity.push(msg)
+      } else {
+        chat.push(msg)
+      }
+    }
+
+    return { chatMessages: chat, activityLogs: activity }
+  }, [allMessages])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages.length])
+  }, [chatMessages.length])
+
+  useEffect(() => {
+    activityEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [activityLogs.length])
 
   const {
     register,
@@ -74,10 +156,9 @@ export default function TicketDetailPage({
     mutationFn: (data: MessageFormData) =>
       messageAPI.postMessage(ticketId, { body: data.body, internal: data.internal }),
     onSuccess: () => {
-      toast({ title: "Pesan terkirim", description: "Pesan Anda telah berhasil dikirim" })
+      toast({ title: "Pesan terkirim" })
       reset()
       queryClient.invalidateQueries({ queryKey: ["ticket", ticketId, "thread"] })
-      queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] })
     },
     onError: (error: any) => {
       toast({
@@ -88,26 +169,11 @@ export default function TicketDetailPage({
     },
   })
 
-  const requestConfirmationMutation = useMutation({
-    mutationFn: (message?: string) => ticketAPI.requestConfirmation(ticketId, message),
-    onSuccess: () => {
-      toast({ title: "Permintaan konfirmasi terkirim ke user" })
-      queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] })
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Gagal",
-        description: error.response?.data?.error?.message || "Terjadi kesalahan",
-        variant: "destructive",
-      })
-    },
-  })
-
   const confirmResolvedMutation = useMutation({
     mutationFn: (data?: { satisfaction?: string; feedback?: string }) =>
       ticketAPI.confirmResolved(ticketId, data),
     onSuccess: () => {
-      toast({ title: "Terima kasih! Ticket dikonfirmasi selesai." })
+      toast({ title: "Ticket dikonfirmasi selesai" })
       queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] })
     },
     onError: (error: any) => {
@@ -127,8 +193,13 @@ export default function TicketDetailPage({
     return (
       <div className="space-y-6">
         <Skeleton className="h-10 w-48" />
-        <Skeleton className="h-64 w-full" />
-        <Skeleton className="h-96 w-full" />
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2 space-y-4">
+            <Skeleton className="h-48" />
+            <Skeleton className="h-64" />
+          </div>
+          <Skeleton className="h-96" />
+        </div>
       </div>
     )
   }
@@ -137,21 +208,17 @@ export default function TicketDetailPage({
     return (
       <div className="space-y-6">
         <Link href="/tickets">
-          <Button variant="ghost">
+          <Button variant="ghost" size="sm">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Kembali
           </Button>
         </Link>
         <Card className="border-destructive">
-          <CardContent className="py-12">
-            <div className="text-center space-y-4">
-              <h3 className="text-lg font-semibold text-destructive">Error Memuat Ticket</h3>
-              <p className="text-muted-foreground">
-                {(ticketError as any)?.response?.data?.error?.message ||
-                  (ticketError as any)?.message ||
-                  "Terjadi kesalahan saat memuat ticket"}
-              </p>
-            </div>
+          <CardContent className="py-12 text-center">
+            <h3 className="text-lg font-semibold text-destructive">Error</h3>
+            <p className="text-muted-foreground mt-2">
+              {(ticketError as any)?.response?.data?.error?.message || "Gagal memuat ticket"}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -163,7 +230,7 @@ export default function TicketDetailPage({
     return (
       <div className="space-y-6">
         <Link href="/tickets">
-          <Button variant="ghost">
+          <Button variant="ghost" size="sm">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Kembali
           </Button>
@@ -179,239 +246,311 @@ export default function TicketDetailPage({
 
   const getPriorityConfig = (priority: string) => {
     switch (priority) {
-      case "4":
-        return { color: "bg-red-100 text-red-800 border-red-200", label: "Very High" }
-      case "3":
-        return { color: "bg-orange-100 text-orange-800 border-orange-200", label: "High" }
-      case "2":
-        return { color: "bg-amber-100 text-amber-800 border-amber-200", label: "Medium" }
-      case "1":
-        return { color: "bg-yellow-100 text-yellow-800 border-yellow-200", label: "Low" }
-      default:
-        return { color: "bg-gray-100 text-gray-800 border-gray-200", label: "Normal" }
+      case "4": return { color: "bg-red-100 text-red-800 border-red-200", label: "Very High" }
+      case "3": return { color: "bg-orange-100 text-orange-800 border-orange-200", label: "High" }
+      case "2": return { color: "bg-amber-100 text-amber-800 border-amber-200", label: "Medium" }
+      case "1": return { color: "bg-yellow-100 text-yellow-800 border-yellow-200", label: "Low" }
+      default: return { color: "bg-gray-100 text-gray-800 border-gray-200", label: "Normal" }
     }
   }
 
+  const getStageColor = (stageName: string) => {
+    const name = stageName?.toLowerCase() || ""
+    if (name.includes("draft") || name.includes("sent")) return "bg-gray-100 text-gray-800"
+    if (name.includes("progress")) return "bg-blue-100 text-blue-800"
+    if (name.includes("awaiting") || name.includes("waiting")) return "bg-amber-100 text-amber-800"
+    if (name.includes("closed")) return "bg-green-100 text-green-800"
+    return "bg-gray-100 text-gray-800"
+  }
+
   const priorityConfig = getPriorityConfig(String(ticket.priority))
-  const isAdmin = isManager()
+  const isAdminUser = isAdmin()
+  const helpdeskRole = getHelpdeskRole()
   const isClosed = ticket.stage?.name?.toLowerCase().includes("closed") || ticket.resolution_confirmed
   const waitingConfirmation = ticket.waiting_user_confirmation && !ticket.resolution_confirmed
+  
+  const canModifyTicket = (): boolean => {
+    if (helpdeskRole === 'super_admin') return true
+    if (helpdeskRole === 'dept_admin') {
+      const ticketDeptId = ticket.department_id ?? null
+      const myDeptId = employee?.department_id ?? null
+      if (!ticketDeptId) return true
+      if (myDeptId && ticketDeptId === myDeptId) return true
+      return false
+    }
+    return false
+  }
+  const canModify = canModifyTicket()
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-3">
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <Link href="/tickets">
           <Button variant="ghost" size="sm">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Kembali ke Daftar Tiket
+            Kembali
           </Button>
         </Link>
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="flex-1 space-y-1">
-            <h1 className="text-3xl font-bold">{ticket.subject}</h1>
-            <p className="text-sm text-muted-foreground">#{ticket.ticket_number}</p>
-            <div className="flex flex-wrap gap-2 mt-2">
-              <Badge variant="outline" className={priorityConfig.color}>
-                {ticket.priority_label || priorityConfig.label}
-              </Badge>
-              {ticket.ticket_category_type && (
-                <Badge variant="secondary">
-                  {ticket.ticket_category_type === "helper" ? "Ticketing Helper" : "Ticketing System"}
-                  {ticket.system_category && ` · ${ticket.system_category}`}
-                </Badge>
-              )}
-              {waitingConfirmation && (
-                <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-200">
-                  Menunggu konfirmasi Anda
-                </Badge>
-              )}
-            </div>
-          </div>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className={getStageColor(ticket.stage?.name || "")}>
+            {ticket.stage?.name || "Unknown"}
+          </Badge>
+          <Badge variant="outline" className={priorityConfig.color}>
+            {ticket.priority_label || priorityConfig.label}
+          </Badge>
         </div>
       </div>
 
+      {/* Title */}
+      <div>
+        <h1 className="text-2xl font-bold">{ticket.subject}</h1>
+        <p className="text-sm text-muted-foreground">#{ticket.ticket_number}</p>
+      </div>
+
+      {/* User Confirmation Alert */}
+      {!isAdminUser && waitingConfirmation && (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="font-medium text-amber-900">Konfirmasi Penyelesaian</p>
+                <p className="text-sm text-amber-700">Apakah masalah sudah teratasi?</p>
+              </div>
+              <Button
+                onClick={() => confirmResolvedMutation.mutate({ satisfaction: "5" })}
+                disabled={confirmResolvedMutation.isPending}
+                className="bg-amber-600 hover:bg-amber-700"
+              >
+                <CheckCircle className="mr-2 h-4 w-4" />
+                Ya, Selesai
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-6">
+        {/* Main Content */}
+        <div className="lg:col-span-2 space-y-4">
+          
+          {/* Description */}
           <Card>
-            <CardHeader>
-              <CardTitle>Deskripsi</CardTitle>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Deskripsi</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="whitespace-pre-wrap">{ticket.description}</p>
+              <p className="whitespace-pre-wrap text-sm">{ticket.description || "—"}</p>
             </CardContent>
           </Card>
 
-          {/* Admin: Request User Confirmation */}
-          {isAdmin && !isClosed && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Aksi Admin</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Jika perbaikan sudah selesai, minta konfirmasi dari pembuat ticket.
-                </p>
-                <Button
-                  variant="outline"
-                  onClick={() => requestConfirmationMutation.mutate()}
-                  disabled={requestConfirmationMutation.isPending}
-                >
-                  <CheckCircle className="mr-2 h-4 w-4" />
-                  Minta Konfirmasi User
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* User: Confirm Resolved (when waiting_confirmation) */}
-          {!isAdmin && waitingConfirmation && (
-            <Card className="border-amber-200 bg-amber-50/50">
-              <CardHeader>
-                <CardTitle className="text-base">Konfirmasi Selesai</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Tim telah menyelesaikan ticket ini. Apakah masalah sudah teratasi?
-                </p>
-                <Button
-                  onClick={() => confirmResolvedMutation.mutate({ satisfaction: "5" })}
-                  disabled={confirmResolvedMutation.isPending}
-                >
-                  <CheckCircle className="mr-2 h-4 w-4" />
-                  Ya, Sudah Teratasi
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        {/* Sidebar: Info + Chat Log */}
-        <div className="space-y-6">
+          {/* Ticket Info (Compact) */}
           <Card>
-            <CardHeader>
-              <CardTitle>Informasi Ticket</CardTitle>
+            <CardContent className="py-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <User className="h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Pemohon</p>
+                    <p className="font-medium">{ticket.customer?.name || ticket.customer_name || "-"}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Building className="h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Department</p>
+                    <p className="font-medium">{ticket.department_name || "-"}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Tim</p>
+                    <p className="font-medium">{ticket.team?.name || "-"}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Dibuat</p>
+                    <p className="font-medium">{formatDate(ticket.create_date)}</p>
+                  </div>
+                </div>
+              </div>
+              {(ticket.assigned_employee?.name || ticket.assigned_user?.name) && (
+                <div className="mt-3 pt-3 border-t flex items-center gap-2">
+                  <User className="h-4 w-4 text-green-600" />
+                  <span className="text-sm">Ditangani oleh: <strong>{ticket.assigned_employee?.name ?? ticket.assigned_user?.name}</strong></span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Odoo Context (for System tickets) */}
+          {ticket.ticket_category_type === "system" && ticket.captured_url && (
+            <Card className="bg-blue-50/50 border-blue-100">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-blue-900">Info Sistem</CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm space-y-1">
+                {ticket.captured_url && <p><span className="text-muted-foreground">URL:</span> {ticket.captured_url}</p>}
+                {ticket.captured_module && <p><span className="text-muted-foreground">Module:</span> {ticket.captured_module}</p>}
+                {ticket.captured_menu_path && <p><span className="text-muted-foreground">Menu:</span> {ticket.captured_menu_path}</p>}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Activity Log / On Progress */}
+          <Card>
+            <CardHeader className="pb-3 bg-blue-50/50 rounded-t-lg">
+              <CardTitle className="text-base flex items-center gap-2">
+                <ClipboardList className="h-4 w-4 text-blue-600" />
+                On Progress
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">Riwayat progress pengerjaan</p>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Status</p>
-                <p className="text-sm">{ticket.stage?.name || ticket.stage_name || "-"}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Team</p>
-                <p className="text-sm">{ticket.team?.name || ticket.team_name || "-"}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Category</p>
-                <p className="text-sm">{ticket.category?.name || ticket.category_name || "-"}</p>
-              </div>
-              {(ticket.customer?.name || ticket.customer_name || ticket.email || ticket.phone) && (
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Customer</p>
-                  {(ticket.customer?.name || ticket.customer_name) && (
-                    <p className="text-sm">{ticket.customer?.name || ticket.customer_name}</p>
-                  )}
-                  {(ticket.customer?.email || ticket.email) && (
-                    <p className="text-xs text-muted-foreground">{ticket.customer?.email || ticket.email}</p>
-                  )}
-                  {(ticket.customer?.phone || ticket.phone) && (
-                    <p className="text-xs text-muted-foreground">{ticket.customer?.phone || ticket.phone}</p>
-                  )}
-                </div>
-              )}
-              {(ticket.assigned_user?.name || ticket.assigned_user_name) && (
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Assigned To</p>
-                  <p className="text-sm">{ticket.assigned_user?.name || ticket.assigned_user_name}</p>
-                </div>
-              )}
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Created</p>
-                <p className="text-sm">{formatDate(ticket.create_date)}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Updated</p>
-                <p className="text-sm">{formatDate(ticket.write_date)}</p>
+            <CardContent className="p-0">
+              <div className="max-h-[280px] overflow-y-auto">
+                {messagesLoading ? (
+                  <div className="p-4 space-y-2">
+                    <Skeleton className="h-12" />
+                    <Skeleton className="h-12" />
+                  </div>
+                ) : activityLogs.length > 0 ? (
+                  <div className="divide-y divide-border/60">
+                    {activityLogs.map((log) => {
+                      const bodyRaw = log.body_plain || log.body || ""
+                      const { label, content } = formatActivityBody(bodyRaw)
+                      return (
+                        <div key={log.id} className="p-4 hover:bg-muted/20 transition-colors">
+                          <div className="flex justify-between items-start gap-2">
+                            <span className="text-sm font-medium text-foreground">{log.author?.name || "System"}</span>
+                            <span className="text-xs text-muted-foreground shrink-0">{formatDate(log.date || log.create_date || "")}</span>
+                          </div>
+                          {label && (
+                            <Badge variant="secondary" className="mt-1.5 text-xs font-normal bg-blue-100 text-blue-800 border-blue-200">
+                              {label}
+                            </Badge>
+                          )}
+                          <p className={`text-sm mt-1.5 ${label ? "text-foreground" : "text-muted-foreground"}`}>
+                            {content || messageToPlainText(bodyRaw)}
+                          </p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="p-6 text-center text-sm text-muted-foreground">Belum ada aktivitas</p>
+                )}
+                <div ref={activityEndRef} />
               </div>
             </CardContent>
           </Card>
 
-          {/* Chat Log */}
+          {/* Chat / Obrolan */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5" />
-                Obrolan / Progress
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <MessageSquare className="h-4 w-4" />
+                Obrolan
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="max-h-[400px] overflow-y-auto p-4 space-y-4">
+              <div className="max-h-[300px] overflow-y-auto">
                 {messagesLoading ? (
-                  <div className="space-y-3">
-                    {[1, 2, 3].map((i) => (
-                      <Skeleton key={i} className="h-20 w-full" />
+                  <div className="p-4 space-y-2">
+                    <Skeleton className="h-16" />
+                    <Skeleton className="h-16" />
+                  </div>
+                ) : chatMessages.length > 0 ? (
+                  <div className="divide-y">
+                    {chatMessages.map((message) => (
+                      <div
+                        key={message.id}
+                        className={`p-3 ${message.is_internal ? "bg-muted/30" : ""}`}
+                      >
+                        <div className="flex justify-between items-start gap-2">
+                          <p className="text-sm font-medium">{message.author?.name || "System"}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatDate(message.date || message.create_date || "")}
+                          </p>
+                        </div>
+                        <p className="text-sm mt-1">{messageToPlainText(message.body_plain || message.body || "")}</p>
+                        {message.is_internal && (
+                          <Badge variant="secondary" className="mt-1 text-xs">Internal</Badge>
+                        )}
+                      </div>
                     ))}
                   </div>
-                ) : messages.length > 0 ? (
-                  messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`rounded-lg border p-3 ${
-                        message.is_internal ? "bg-muted/50 border-muted" : "bg-background"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <p className="font-medium text-sm">{message.author?.name || "Sistem"}</p>
-                        <p className="text-xs text-muted-foreground whitespace-nowrap">
-                          {formatDate(message.date || message.create_date || "")}
-                        </p>
-                      </div>
-                      <p className="text-sm whitespace-pre-wrap">
-                        {message.body_plain || message.body?.replace(/<[^>]+>/g, "").trim() || message.body}
-                      </p>
-                      {message.is_internal && (
-                        <Badge variant="secondary" className="mt-2 text-xs">Internal</Badge>
-                      )}
-                    </div>
-                  ))
                 ) : (
-                  <p className="text-center text-muted-foreground py-6 text-sm">Belum ada pesan</p>
+                  <p className="p-6 text-center text-sm text-muted-foreground">Belum ada pesan</p>
                 )}
                 <div ref={messagesEndRef} />
               </div>
+              
+              {/* Send Message Form */}
               {!isClosed && (
-                <form onSubmit={handleSubmit(onSubmit)} className="p-4 border-t space-y-2">
+                <form onSubmit={handleSubmit(onSubmit)} className="p-3 border-t bg-muted/20">
                   <Textarea
-                    placeholder="Tulis pesan atau tanya progress..."
+                    placeholder="Tulis pesan..."
                     {...register("body")}
-                    className={errors.body ? "border-destructive" : ""}
+                    className={`text-sm bg-background ${errors.body ? "border-destructive" : ""}`}
                     rows={2}
                   />
-                  {errors.body && (
-                    <p className="text-xs text-destructive">{errors.body.message}</p>
-                  )}
-                  {isAdmin && (
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        id="internal"
-                        {...register("internal")}
-                        className="rounded"
-                      />
-                      <label htmlFor="internal" className="text-xs">Pesan internal</label>
+                  {isAdminUser && (
+                    <div className="flex items-center gap-2 mt-2">
+                      <input type="checkbox" id="internal" {...register("internal")} className="rounded" />
+                      <label htmlFor="internal" className="text-xs text-muted-foreground">Internal</label>
                     </div>
                   )}
-                  <Button
-                    type="submit"
-                    size="sm"
-                    disabled={sendMessageMutation.isPending}
-                  >
-                    <Send className="mr-2 h-4 w-4" />
+                  <Button type="submit" size="sm" className="mt-2" disabled={sendMessageMutation.isPending}>
+                    <Send className="mr-2 h-3 w-3" />
                     Kirim
                   </Button>
                 </form>
               )}
             </CardContent>
           </Card>
+        </div>
+
+        {/* Sidebar - Admin Actions */}
+        <div className="space-y-4">
+          {isAdminUser && (
+            <TicketAdminActions ticket={ticket} canModify={canModify} />
+          )}
+
+          {/* Quick Info for Non-Admin */}
+          {!isAdminUser && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Status Ticket</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Status</p>
+                  <Badge variant="outline" className={getStageColor(ticket.stage?.name || "")}>
+                    {ticket.stage?.name}
+                  </Badge>
+                </div>
+                {ticket.team && (
+                  <div>
+                    <p className="text-muted-foreground">Tim</p>
+                    <p className="font-medium">{ticket.team.name}</p>
+                  </div>
+                )}
+                {(ticket.assigned_employee?.name || ticket.assigned_user?.name) && (
+                  <div>
+                    <p className="text-muted-foreground">Ditangani</p>
+                    <p className="font-medium">{ticket.assigned_employee?.name ?? ticket.assigned_user?.name}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-muted-foreground">Terakhir Update</p>
+                  <p>{formatDate(ticket.write_date)}</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

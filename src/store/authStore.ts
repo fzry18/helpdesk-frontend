@@ -20,6 +20,12 @@ interface AuthState {
   getJobTitle: () => string
   // Helper untuk cek apakah manager
   isManager: () => boolean
+  // Helper untuk mendapatkan helpdesk role
+  getHelpdeskRole: () => 'user' | 'dept_admin' | 'super_admin'
+  // Helper untuk cek apakah admin (dept_admin atau super_admin)
+  isAdmin: () => boolean
+  // Helper untuk cek apakah super admin
+  isSuperAdmin: () => boolean
   logout: () => void
 }
 
@@ -61,6 +67,19 @@ export const useAuthStore = create<AuthState>()(
       isManager: () => {
         const state = get()
         return state.employee?.is_manager ?? false
+      },
+      getHelpdeskRole: () => {
+        const state = get()
+        return state.employee?.helpdesk_role || 'user'
+      },
+      isAdmin: () => {
+        const state = get()
+        const role = state.employee?.helpdesk_role
+        return role === 'dept_admin' || role === 'super_admin'
+      },
+      isSuperAdmin: () => {
+        const state = get()
+        return state.employee?.helpdesk_role === 'super_admin'
       },
       logout: () => {
         if (typeof window !== "undefined") {

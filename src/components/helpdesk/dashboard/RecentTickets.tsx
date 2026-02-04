@@ -1,9 +1,39 @@
 "use client"
 
+import { useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { TicketCard } from "@/components/helpdesk/tickets/TicketCard"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { Ticket } from "@/types"
+
+const STATUS_ORDER: ("Open" | "In Progress" | "Closed")[] = ["Open", "In Progress", "Closed"]
+const STATUS_LABELS: Record<"Open" | "In Progress" | "Closed", string> = {
+  Open: "Terbuka",
+  "In Progress": "In Progress",
+  Closed: "Selesai",
+}
+const COLUMN_SCROLL_HEIGHT = 320
+const COLUMN_MIN_WIDTH = 280
+
+/** Group by stage/status: Open, In Progress, Closed (pakai stage.name / actual_name) */
+function getTicketStatusGroup(ticket: Ticket): "Open" | "In Progress" | "Closed" {
+  const name = ((ticket.stage?.actual_name ?? ticket.stage?.name) ?? "").toString().toLowerCase()
+  if (
+    name.includes("closed") ||
+    name.includes("selesai") ||
+    ticket.resolution_confirmed === true
+  )
+    return "Closed"
+  if (
+    name.includes("progress") ||
+    name.includes("in progress") ||
+    name.includes("awaiting") ||
+    name.includes("confirmation") ||
+    name.includes("menunggu")
+  )
+    return "In Progress"
+  return "Open"
+}
 
 interface RecentTicketsProps {
   tickets: Ticket[] | null
@@ -11,16 +41,37 @@ interface RecentTicketsProps {
 }
 
 export function RecentTickets({ tickets, isLoading }: RecentTicketsProps) {
+  const groupsByStatus = useMemo(() => {
+    const groups: Record<"Open" | "In Progress" | "Closed", Ticket[]> = {
+      Open: [],
+      "In Progress": [],
+      Closed: [],
+    }
+    if (tickets && tickets.length > 0) {
+      const sorted = [...tickets].sort((a, b) => {
+        const dateA = new Date(a.write_date || a.create_date || 0).getTime()
+        const dateB = new Date(b.write_date || b.create_date || 0).getTime()
+        return dateB - dateA
+      })
+      for (const t of sorted) {
+        const group = getTicketStatusGroup(t)
+        groups[group].push(t)
+      }
+    }
+    return STATUS_ORDER.map((key) => ({ key, tickets: groups[key], label: STATUS_LABELS[key] }))
+  }, [tickets])
+
   if (isLoading) {
     return (
       <Card>
         <CardHeader>
           <CardTitle>Recent Tickets</CardTitle>
+          <p className="text-xs text-muted-foreground">Grouped by stage/status, ordered by latest update</p>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
+          <div className="flex gap-4 overflow-x-auto pb-2">
             {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-32 w-full" />
+              <Skeleton key={i} className="h-[320px] shrink-0 rounded-lg" style={{ minWidth: COLUMN_MIN_WIDTH }} />
             ))}
           </div>
         </CardContent>
@@ -28,30 +79,40 @@ export function RecentTickets({ tickets, isLoading }: RecentTicketsProps) {
     )
   }
 
-  if (!tickets || tickets.length === 0) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Tickets</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-center text-muted-foreground py-8">
-            Tidak ada ticket terbaru
-          </p>
-        </CardContent>
-      </Card>
-    )
-  }
-
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Recent Tickets</CardTitle>
+    <Card className="w-full min-w-0 overflow-hidden">
+      <CardHeader className="pb-2">
+        <CardTitle>Tiket Terbaru</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Geser ke samping untuk lihat tiap status; scroll ke bawah di dalam tiap kotak untuk daftar tiket
+        </p>
       </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {tickets.map((ticket) => (
-            <TicketCard key={ticket.id} ticket={ticket} />
+      <CardContent className="w-full min-w-0 p-0 md:p-4">
+        <div className="flex w-full flex-nowrap gap-4 overflow-x-auto overflow-y-hidden pb-2 scroll-smooth md:min-h-[360px]">
+          {groupsByStatus.map(({ key, tickets: list, label }) => (
+            <section
+              key={key}
+              className="flex min-h-0 shrink-0 flex-col rounded-lg border bg-muted/20"
+              style={{ minWidth: COLUMN_MIN_WIDTH }}
+            >
+              <h3 className="shrink-0 border-b px-3 py-2 text-sm font-semibold text-muted-foreground">
+                {label} ({list.length})
+              </h3>
+              <div
+                className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2"
+                style={{ height: COLUMN_SCROLL_HEIGHT }}
+              >
+                {list.length === 0 ? (
+                  <p className="py-6 text-center text-xs text-muted-foreground">Tidak ada</p>
+                ) : (
+                  <div className="space-y-3">
+                    {list.map((ticket) => (
+                      <TicketCard key={ticket.id} ticket={ticket} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
           ))}
         </div>
       </CardContent>

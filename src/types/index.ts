@@ -10,6 +10,7 @@ export interface Employee {
   email: string
   phone: string
   is_manager?: boolean
+  helpdesk_role?: 'user' | 'dept_admin' | 'super_admin'
 }
 
 export interface LoginRequest {
@@ -41,12 +42,14 @@ export interface Ticket {
   /** Admin sudah selesai, menunggu user konfirmasi */
   waiting_user_confirmation?: boolean
   resolution_confirmed?: boolean
-  stage?: { id: number; name: string } | null
+  stage?: { id: number; name: string; actual_name?: string } | null
   team?: { id: number; name: string } | null
   category?: { id: number; name: string } | null
   ticket_type?: { id: number; name: string } | null
   customer?: { id: number; name: string; email: string; phone: string } | null
   assigned_user?: { id: number; name: string } | null
+  /** Nama anggota tim (employee) yang di-assign - agar pembuat ticket tahu siapa yang mengurusi */
+  assigned_employee?: { id: number; name: string } | null
   created_by?: { id: number; name: string } | null
   stage_id?: number
   stage_name?: string
@@ -60,6 +63,8 @@ export interface Ticket {
   customer_name?: string
   email?: string
   phone?: string
+  department_id?: number | null
+  department_name?: string | null
   assigned_user_id?: number
   assigned_user_name?: string
   create_date: string
@@ -142,18 +147,36 @@ export interface TicketType {
   name: string
 }
 
+/** Team member - sekarang adalah hr.employee (bukan res.users) */
+export interface TeamMember {
+  id: number
+  employee_id: number
+  name: string
+  nik?: string
+  email?: string
+  phone?: string
+  department_id?: number | null
+  department_name?: string | null
+  job_title?: string
+  user_id?: number | null
+}
+
 export interface Team {
   id: number
   name: string
   email?: string
   leader?: { id: number; name: string } | null
+  leader_employee?: { id: number; name: string; nik?: string } | null
   member_count?: number
-  members?: Array<{ id: number; name: string; email?: string }>
+  /** Members sekarang adalah hr.employee (bukan res.users) */
+  members?: TeamMember[]
 }
 
 export interface Stage {
   id: number
   name: string
+  /** Nama stage asli di backend (untuk admin) */
+  actual_name?: string
   sequence?: number
   is_starting?: boolean
   is_closing?: boolean
