@@ -17,9 +17,18 @@ import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/hooks/use-toast"
 import { 
   UserPlus, CheckCircle, Loader2, Play, Users, 
-  ClipboardList, Send, User, Settings
+  ClipboardList, Send, User, Settings, XCircle, AlertTriangle
 } from "lucide-react"
 import type { Ticket } from "@/types"
+
+// Priority options
+const PRIORITY_OPTIONS = [
+  { value: "0", label: "Very Low", color: "text-gray-600" },
+  { value: "1", label: "Low", color: "text-green-600" },
+  { value: "2", label: "Normal", color: "text-yellow-600" },
+  { value: "3", label: "High", color: "text-orange-600" },
+  { value: "4", label: "Urgent", color: "text-red-600" },
+]
 
 interface TicketAdminActionsProps {
   ticket: Ticket
@@ -36,6 +45,11 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
   const [selectedMember, setSelectedMember] = useState<string>("")
   const [confirmMessage, setConfirmMessage] = useState("")
   const [activityContent, setActivityContent] = useState("")
+  const [rejectReason, setRejectReason] = useState("")
+  const [showRejectForm, setShowRejectForm] = useState(false)
+  const [selectedPriority, setSelectedPriority] = useState<string>(
+    typeof ticket.priority === 'string' ? ticket.priority : "2"
+  )
 
   // Sinkronkan dropdown team dan member dengan data ticket terbaru (dari server)
   useEffect(() => {
@@ -48,6 +62,12 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
       setSelectedMember("")
     }
   }, [ticket.assigned_employee?.id])
+
+  // Sync priority with ticket data
+  useEffect(() => {
+    const priorityValue = typeof ticket.priority === 'string' ? ticket.priority : "2"
+    setSelectedPriority(priorityValue)
+  }, [ticket.priority])
 
   // Fetch teams
   const { data: teamsData } = useQuery({
@@ -75,10 +95,27 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
   const teamMembers = membersFromDetail.length > 0 ? membersFromDetail : membersFromFallback
   const teamMembersLoading = teamDetailLoading
 
-  // Check ticket status
-  const isDraft = ticket.stage?.name === "Draft" || ticket.stage?.actual_name === "Draft"
-  const isInProgress = ticket.stage?.name === "In Progress"
-  const isClosed = ticket.stage?.name?.toLowerCase().includes("closed") || ticket.resolution_confirmed
+  // Check ticket status - also handle null/missing stage as Draft (new tickets)
+  const stageName = ticket.stage?.name?.toLowerCase() || ""
+  const stageActualName = ticket.stage?.actual_name?.toLowerCase() || ""
+  
+  // isDraft: stage is Draft, Sent, or null/missing (new tickets from system)
+  const isDraft = 
+    !ticket.stage || 
+    !ticket.stage.name ||
+    stageName === "draft" || 
+    stageName === "sent" || 
+    stageActualName === "draft"
+  
+  const isInProgress = 
+    stageName.includes("progress") || 
+    stageActualName.includes("progress")
+  
+  const isClosed = 
+    stageName.includes("closed") || 
+    stageActualName.includes("closed") || 
+    ticket.resolution_confirmed
+  
   const isAwaitingConfirmation = ticket.waiting_user_confirmation && !ticket.resolution_confirmed
 
   // ============================================
@@ -184,18 +221,57 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
     },
   })
 
-  const requestConfirmation = useMutation({
-    mutationFn: (message: string) => ticketAPI.requestConfirmation(ticket.id, message),
+  const closeTicket = useMutation({
+    mutationFn: (message: string) => ticketAPI.closeTicket(ticket.id, message),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ticket", ticket.id] })
       queryClient.invalidateQueries({ queryKey: ["tickets"] })
       setConfirmMessage("")
-      toast({ title: "Berhasil", description: "Permintaan konfirmasi terkirim" })
+      toast({ title: "Berhasil", description: "Ticket telah diselesaikan" })
     },
     onError: (error: any) => {
       toast({
         title: "Gagal",
-        description: error.response?.data?.message || "Gagal mengirim konfirmasi",
+        description: error.response?.data?.message || "Gagal menutup ticket",
+        variant: "destructive",
+      })
+    },
+  })
+
+  // Reject ticket mutation
+  const rejectTicket = useMutation({
+    mutationFn: (reason: string) => ticketAPI.rejectTicket(ticket.id, reason),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ticket", ticket.id] })
+      queryClient.invalidateQueries({ queryKey: ["tickets"] })
+      setRejectReason("")
+      setShowRejectForm(false)
+      toast({ title: "Berhasil", description: "Ticket telah ditolak" })
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Gagal",
+        description: error.response?.data?.message || "Gagal menolak ticket",
+        variant: "destructive",
+      })
+    },
+  })
+
+  // Set priority mutation
+  const setPriority = useMutation({
+    mutationFn: (priority: string) => ticketAPI.setPriority(ticket.id, priority),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["ticket", ticket.id] })
+      queryClient.invalidateQueries({ queryKey: ["tickets"] })
+      toast({ 
+        title: "Berhasil", 
+        description: `Priority diubah ke ${data?.data?.priority_label || selectedPriority}` 
+      })
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Gagal",
+        description: error.response?.data?.message || "Gagal mengubah priority",
         variant: "destructive",
       })
     },
@@ -234,8 +310,21 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
     }
   }
 
-  const handleRequestConfirmation = () => {
-    if (canModify) requestConfirmation.mutate(confirmMessage)
+  const handleCloseTicket = () => {
+    if (canModify) closeTicket.mutate(confirmMessage)
+  }
+
+  const handleRejectTicket = () => {
+    if (canModify && rejectReason.trim()) {
+      rejectTicket.mutate(rejectReason.trim())
+    }
+  }
+
+  const handlePriorityChange = (value: string) => {
+    setSelectedPriority(value)
+    if (canModify) {
+      setPriority.mutate(value)
+    }
   }
 
   // ============================================
@@ -271,12 +360,6 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
       <CardContent className="pt-4 space-y-4">
         
         {/* Status Info */}
-        {isAwaitingConfirmation && (
-          <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
-            <p className="text-sm font-medium text-amber-800">⏳ Menunggu konfirmasi user</p>
-          </div>
-        )}
-        
         {isClosed && (
           <div className="p-3 rounded-lg bg-green-50 border border-green-200">
             <p className="text-sm font-medium text-green-800">✅ Ticket selesai</p>
@@ -284,12 +367,12 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
         )}
 
         {/* 1. Open/Progress Ticket */}
-        {isDraft && !isClosed && (
+        {isDraft && !isClosed && !ticket.is_rejected && (
           <div className="p-3 rounded-lg border-2 border-dashed border-primary/30 bg-primary/5">
             <Button
               onClick={handleOpenTicket}
               disabled={openTicket.isPending}
-              className="w-full"
+              className="w-full transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]"
               size="lg"
             >
               {openTicket.isPending ? (
@@ -305,6 +388,115 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
           </div>
         )}
 
+        {/* Set Priority - untuk ticket yang belum diproses */}
+        {isDraft && !isClosed && !ticket.is_rejected && (
+          <div className="space-y-2 p-3 rounded-lg bg-amber-50/50 border border-amber-200">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <span className="text-sm font-medium text-amber-900">Set Priority</span>
+            </div>
+            <p className="text-xs text-amber-700">
+              Tentukan tingkat prioritas sebelum memproses ticket
+            </p>
+            <Select value={selectedPriority} onValueChange={handlePriorityChange}>
+              <SelectTrigger disabled={setPriority.isPending} className="bg-white">
+                <SelectValue placeholder="Pilih priority..." />
+              </SelectTrigger>
+              <SelectContent>
+                {PRIORITY_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    <span className={`flex items-center gap-2 ${opt.color}`}>
+                      {opt.label}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* Reject Ticket - untuk ticket yang belum diproses */}
+        {isDraft && !isClosed && !ticket.is_rejected && (
+          <div className="space-y-2 p-3 rounded-lg bg-red-50/50 border border-red-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <XCircle className="h-4 w-4 text-red-600" />
+                <span className="text-sm font-medium text-red-900">Tolak Ticket</span>
+              </div>
+              {!showRejectForm && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowRejectForm(true)}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-100"
+                >
+                  Tolak
+                </Button>
+              )}
+            </div>
+            
+            {showRejectForm && (
+              <div className="space-y-2">
+                <Textarea
+                  placeholder="Alasan penolakan (wajib diisi)..."
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  rows={3}
+                  disabled={rejectTicket.isPending}
+                  className="bg-white text-sm"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleRejectTicket}
+                    disabled={rejectTicket.isPending || !rejectReason.trim()}
+                    variant="destructive"
+                    size="sm"
+                    className="flex-1"
+                  >
+                    {rejectTicket.isPending ? (
+                      <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                    ) : (
+                      <XCircle className="mr-2 h-3 w-3" />
+                    )}
+                    Konfirmasi Tolak
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setShowRejectForm(false)
+                      setRejectReason("")
+                    }}
+                    disabled={rejectTicket.isPending}
+                  >
+                    Batal
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Ticket Rejected Info */}
+        {ticket.is_rejected && (
+          <div className="p-3 rounded-lg bg-red-50 border border-red-200">
+            <div className="flex items-center gap-2 mb-2">
+              <XCircle className="h-4 w-4 text-red-600" />
+              <span className="text-sm font-semibold text-red-800">Ticket Ditolak</span>
+            </div>
+            {ticket.rejection_reason && (
+              <p className="text-sm text-red-700">
+                <strong>Alasan:</strong> {ticket.rejection_reason}
+              </p>
+            )}
+            {ticket.rejected_date && (
+              <p className="text-xs text-red-600 mt-1">
+                Ditolak pada: {new Date(ticket.rejected_date).toLocaleString('id-ID')}
+              </p>
+            )}
+          </div>
+        )}
+
         {/* 2. Assign Team & Member */}
         {!isClosed && (
           <div className="space-y-3 p-3 rounded-lg bg-muted/30">
@@ -313,11 +505,18 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
               <span className="text-sm font-medium">Assignment</span>
             </div>
             
+            {/* Info: Disabled when Draft */}
+            {isDraft && (
+              <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
+                ⚠️ Proses ticket terlebih dahulu untuk mengatur assignment
+              </p>
+            )}
+            
             {/* Team Selection */}
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Team</Label>
-              <Select value={selectedTeam} onValueChange={handleTeamChange}>
-                <SelectTrigger disabled={assignTeam.isPending} className="bg-background">
+              <Select value={selectedTeam} onValueChange={handleTeamChange} disabled={isDraft}>
+                <SelectTrigger disabled={isDraft || assignTeam.isPending} className="bg-background">
                   <SelectValue placeholder="Pilih team..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -343,9 +542,9 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
                 <Select 
                   value={selectedMember} 
                   onValueChange={handleMemberChange}
-                  disabled={!teamId || teamMembersLoading}
+                  disabled={isDraft || !teamId || teamMembersLoading}
                 >
-                  <SelectTrigger disabled={assignByEmployee.isPending || assignUser.isPending} className="bg-background">
+                  <SelectTrigger disabled={isDraft || assignByEmployee.isPending || assignUser.isPending} className="bg-background">
                     <SelectValue placeholder={
                       !teamId
                         ? "Pilih team dulu" 
@@ -381,8 +580,8 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
                   variant="outline"
                   size="icon"
                   onClick={handleAssignToMe}
-                  disabled={assignToMe.isPending}
-                  title="Assign ke saya"
+                  disabled={isDraft || assignToMe.isPending}
+                  title={isDraft ? "Proses ticket dulu" : "Assign ke saya"}
                   className="shrink-0"
                 >
                   {assignToMe.isPending ? (
@@ -424,7 +623,7 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
               disabled={postActivityLog.isPending || !activityContent.trim()}
               variant="secondary"
               size="sm"
-              className="w-full"
+              className="w-full transition-all duration-200 hover:bg-blue-100 hover:text-blue-700 active:scale-[0.98]"
             >
               {postActivityLog.isPending ? (
                 <Loader2 className="mr-2 h-3 w-3 animate-spin" />
@@ -436,31 +635,34 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
           </div>
         )}
 
-        {/* 4. Request Confirmation */}
-        {!isClosed && !isDraft && !isAwaitingConfirmation && (
+        {/* 4. Close/Complete Ticket */}
+        {!isClosed && !isDraft && (
           <div className="space-y-2 pt-3 border-t">
             <Label className="text-sm font-medium">Selesaikan Ticket</Label>
             <Textarea
-              placeholder="Pesan untuk user (opsional)..."
+              placeholder="Catatan penutupan (opsional, bisa juga tulis di Obrolan)..."
               value={confirmMessage}
               onChange={(e) => setConfirmMessage(e.target.value)}
               rows={2}
-              disabled={requestConfirmation.isPending}
+              disabled={closeTicket.isPending}
               className="text-sm"
             />
             <Button
-              onClick={handleRequestConfirmation}
-              disabled={requestConfirmation.isPending}
-              className="w-full"
+              onClick={handleCloseTicket}
+              disabled={closeTicket.isPending}
+              className="w-full bg-green-600 hover:bg-green-700 transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]"
               variant="default"
             >
-              {requestConfirmation.isPending ? (
+              {closeTicket.isPending ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
                 <CheckCircle className="mr-2 h-4 w-4" />
               )}
-              Minta Konfirmasi User
+              Selesaikan Ticket
             </Button>
+            <p className="text-xs text-center text-muted-foreground">
+              Ticket akan langsung ditutup tanpa konfirmasi user
+            </p>
           </div>
         )}
 

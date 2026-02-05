@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { formatDate } from "@/lib/utils"
+import { formatDate, cn } from "@/lib/utils"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -32,15 +32,75 @@ function messageToPlainText(htmlOrEncoded: string): string {
 
 /** Format body activity log: pisahkan label (Progress Update, dll) dari isi agar tampilan rapi */
 function formatActivityBody(rawBody: string): { label: string | null; content: string } {
-  const text = messageToPlainText(rawBody || "").trim()
+  let text = messageToPlainText(rawBody || "").trim()
   if (!text) return { label: null, content: "" }
-  const progressPrefix = "Progress Update"
-  if (text.toLowerCase().startsWith(progressPrefix.toLowerCase())) {
-    const rest = text.slice(progressPrefix.length).replace(/^\s*[:.\-]\s*/, "").trim()
-    return { label: "Progress Update", content: rest || text }
+  
+  // Clean up broken emoji characters (mojibake) - comprehensive cleanup
+  text = text.replace(/ð[^\s]*/g, "")  // Remove mojibake sequences starting with ð
+  text = text.replace(/â[^\s]*/g, "")  // Remove mojibake sequences starting with â
+  text = text.replace(/Ã[^\s]*/g, "")  // Remove mojibake sequences starting with Ã
+  text = text.replace(/[\x00-\x1F\x7F]/g, "") // Remove control characters
+  text = text.trim()
+  
+  if (!text) return { label: null, content: "" }
+  
+  // Pattern untuk mendeteksi dan memisahkan label dari content
+  const patterns = [
+    { pattern: /progress\s*update/i, label: "Progress Update" },
+    { pattern: /ticket\s*sedang\s*diproses/i, label: "Ticket Diproses" },
+    { pattern: /ticket\s*di-?assign\s*ke\s*member[:\s]*/i, label: "Member Assignment" },
+    { pattern: /ticket\s*di-?assign\s*ke\s*team[:\s]*/i, label: "Team Assignment" },
+    { pattern: /ticket\s*selesai/i, label: "Ticket Selesai" },
+    { pattern: /menunggu\s*konfirmasi/i, label: "Menunggu Konfirmasi" },
+    { pattern: /catatan/i, label: "Catatan" },
+  ]
+  
+  for (const { pattern, label } of patterns) {
+    const match = text.match(pattern)
+    if (match) {
+      const idx = match.index || 0
+      const matchLen = match[0].length
+      
+      // Extract content after the matched pattern
+      let content = text.slice(idx + matchLen).replace(/^\s*[:.\-]\s*/, "").trim()
+      
+      // If match has team name, extract it
+      if (label === "Team Assignment") {
+        const teamMatch = text.match(/team[:\s]*([A-Za-z0-9\s]+)/i)
+        if (teamMatch) {
+          content = teamMatch[1].trim()
+        }
+      }
+      
+      // If match has member name, extract it
+      if (label === "Member Assignment") {
+        const memberMatch = text.match(/member[:\s]*([A-Za-z0-9\s]+)/i)
+        if (memberMatch) {
+          content = memberMatch[1].trim()
+        }
+      }
+      
+      // Provide default content based on label if content is empty
+      if (!content) {
+        switch (label) {
+          case "Ticket Diproses":
+            content = "Admin telah membuka ticket ini untuk diproses"
+            break
+          case "Ticket Selesai":
+            content = "Ticket telah diselesaikan oleh admin"
+            break
+          case "Menunggu Konfirmasi":
+            content = "Menunggu konfirmasi dari user"
+            break
+          default:
+            content = ""
+        }
+      }
+      
+      return { label, content: content.trim() }
+    }
   }
-  if (text.toLowerCase().includes("di-assign ke team")) return { label: null, content: text }
-  if (text.toLowerCase().includes("diproses") || text.toLowerCase().includes("dibuka")) return { label: null, content: text }
+  
   return { label: null, content: text }
 }
 
@@ -118,6 +178,11 @@ export default function TicketDetailPage({
         bodyText.includes("📋") ||
         bodyText.includes("🔄") ||
         bodyText.includes("👥") ||
+        bodyText.includes("👤") ||
+        bodyText.includes("di-assign ke member") ||
+        bodyText.includes("di-assign ke team") ||
+        bodyText.includes("Ticket sedang diproses") ||
+        bodyText.includes("Ticket selesai") ||
         (msg.is_internal &&
           (bodyText.includes("progress") ||
             bodyText.includes("Catatan") ||
@@ -244,23 +309,80 @@ export default function TicketDetailPage({
     )
   }
 
+  // Priority config sesuai dengan Odoo: 0=Very Low, 1=Low, 2=Normal, 3=High, 4=Very High
   const getPriorityConfig = (priority: string) => {
     switch (priority) {
-      case "4": return { color: "bg-red-100 text-red-800 border-red-200", label: "Very High" }
-      case "3": return { color: "bg-orange-100 text-orange-800 border-orange-200", label: "High" }
-      case "2": return { color: "bg-amber-100 text-amber-800 border-amber-200", label: "Medium" }
-      case "1": return { color: "bg-yellow-100 text-yellow-800 border-yellow-200", label: "Low" }
-      default: return { color: "bg-gray-100 text-gray-800 border-gray-200", label: "Normal" }
+      case "4": return { color: "bg-red-100 text-red-700 border-red-300", label: "Very High" }
+      case "3": return { color: "bg-orange-100 text-orange-700 border-orange-300", label: "High" }
+      case "2": return { color: "bg-yellow-50 text-yellow-700 border-yellow-300", label: "Normal" }
+      case "1": return { color: "bg-green-50 text-green-700 border-green-300", label: "Low" }
+      case "0": return { color: "bg-gray-100 text-gray-600 border-gray-300", label: "Very Low" }
+      default: return { color: "bg-yellow-50 text-yellow-700 border-yellow-300", label: "Normal" }
     }
   }
 
-  const getStageColor = (stageName: string) => {
+  // Helper untuk mendapatkan label sistem
+  const getSystemLabel = (systemCategory: string | null | undefined): string => {
+    switch (systemCategory) {
+      case "odoo": return "Odoo ERP"
+      case "p2h": return "Web P2H"
+      case "job_portal": return "Job Portal"
+      case "other": return "Sistem Lainnya"
+      default: return ""
+    }
+  }
+
+  // Helper untuk warna sistem badge
+  const getSystemBadgeStyle = (systemCategory: string | null | undefined): string => {
+    switch (systemCategory) {
+      case "odoo": return "bg-purple-100 text-purple-700 border-purple-300"
+      case "p2h": return "bg-blue-100 text-blue-700 border-blue-300"
+      case "job_portal": return "bg-teal-100 text-teal-700 border-teal-300"
+      case "other": return "bg-gray-100 text-gray-700 border-gray-300"
+      default: return "bg-gray-100 text-gray-600 border-gray-200"
+    }
+  }
+
+  // Get display stage name - handle null/missing stage for System tickets
+  const getDisplayStageName = (ticket: any): string => {
+    // Check if stage object exists and has name
+    if (ticket.stage && typeof ticket.stage === "object" && ticket.stage.name) {
+      return ticket.stage.name
+    }
+    // Fallback to stage_name
+    if (ticket.stage_name) {
+      return ticket.stage_name
+    }
+    // If stage is a string directly
+    if (typeof ticket.stage === "string" && ticket.stage) {
+      return ticket.stage
+    }
+    // Final fallback - "Sent" for new tickets (especially system tickets)
+    return "Sent"
+  }
+
+  const getStageColor = (stageName: string, isRejected?: boolean) => {
+    // If rejected, always show red
+    if (isRejected) return "bg-red-600 text-white"
+    
     const name = stageName?.toLowerCase() || ""
-    if (name.includes("draft") || name.includes("sent")) return "bg-gray-100 text-gray-800"
-    if (name.includes("progress")) return "bg-blue-100 text-blue-800"
-    if (name.includes("awaiting") || name.includes("waiting")) return "bg-amber-100 text-amber-800"
-    if (name.includes("closed")) return "bg-green-100 text-green-800"
-    return "bg-gray-100 text-gray-800"
+    // Sent/Draft - Blue (prominent)
+    if (name.includes("draft") || name.includes("sent")) return "bg-blue-500 text-white"
+    // In Progress - Amber
+    if (name.includes("progress")) return "bg-amber-500 text-white"
+    // Awaiting/Waiting - Orange
+    if (name.includes("awaiting") || name.includes("waiting") || name.includes("menunggu")) return "bg-orange-500 text-white"
+    // Closed/Done - Green
+    if (name.includes("closed") || name.includes("selesai")) return "bg-green-600 text-white"
+    // Rejected
+    if (name.includes("reject") || name.includes("tolak")) return "bg-red-600 text-white"
+    return "bg-gray-500 text-white"
+  }
+
+  // Get display stage name considering rejection
+  const getDisplayStageNameWithRejection = (): string => {
+    if (ticket.is_rejected) return "Ditolak"
+    return getDisplayStageName(ticket)
   }
 
   const priorityConfig = getPriorityConfig(String(ticket.priority))
@@ -285,16 +407,16 @@ export default function TicketDetailPage({
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Link href="/tickets">
           <Button variant="ghost" size="sm">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Kembali
           </Button>
         </Link>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className={getStageColor(ticket.stage?.name || "")}>
-            {ticket.stage?.name || "Unknown"}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge className={cn("text-sm font-semibold px-3 py-1", getStageColor(getDisplayStageNameWithRejection(), ticket.is_rejected))}>
+            {getDisplayStageNameWithRejection()}
           </Badge>
           <Badge variant="outline" className={priorityConfig.color}>
             {ticket.priority_label || priorityConfig.label}
@@ -302,37 +424,48 @@ export default function TicketDetailPage({
         </div>
       </div>
 
+      {/* Rejection Notice */}
+      {ticket.is_rejected && (
+        <div className="p-4 rounded-lg bg-red-50 border border-red-200">
+          <div className="flex items-start gap-3">
+            <div className="shrink-0 w-8 h-8 rounded-full bg-red-100 flex items-center justify-center">
+              <span className="text-red-600 text-lg">✕</span>
+            </div>
+            <div>
+              <h3 className="font-semibold text-red-800">Ticket Ditolak</h3>
+              {ticket.rejection_reason && (
+                <p className="text-sm text-red-700 mt-1">
+                  <strong>Alasan:</strong> {ticket.rejection_reason}
+                </p>
+              )}
+              {ticket.rejected_date && (
+                <p className="text-xs text-red-600 mt-2">
+                  Ditolak pada: {new Date(ticket.rejected_date).toLocaleString('id-ID')}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Title */}
       <div>
-        <h1 className="text-2xl font-bold">{ticket.subject}</h1>
+        {/* System Category Badge - tampil di atas judul untuk ticket system */}
+        {ticket.ticket_category_type === "system" && ticket.system_category && (
+          <Badge 
+            variant="outline" 
+            className={cn("text-xs font-medium px-2 py-0.5 mb-2", getSystemBadgeStyle(ticket.system_category))}
+          >
+            {getSystemLabel(ticket.system_category)}
+          </Badge>
+        )}
+        <h1 className="text-xl sm:text-2xl font-bold break-words">{ticket.subject}</h1>
         <p className="text-sm text-muted-foreground">#{ticket.ticket_number}</p>
       </div>
 
-      {/* User Confirmation Alert */}
-      {!isAdminUser && waitingConfirmation && (
-        <Card className="border-amber-300 bg-amber-50">
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="font-medium text-amber-900">Konfirmasi Penyelesaian</p>
-                <p className="text-sm text-amber-700">Apakah masalah sudah teratasi?</p>
-              </div>
-              <Button
-                onClick={() => confirmResolvedMutation.mutate({ satisfaction: "5" })}
-                disabled={confirmResolvedMutation.isPending}
-                className="bg-amber-600 hover:bg-amber-700"
-              >
-                <CheckCircle className="mr-2 h-4 w-4" />
-                Ya, Selesai
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-4 md:gap-6 grid-cols-1 lg:grid-cols-3">
         {/* Main Content */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className="lg:col-span-2 space-y-4 order-2 lg:order-1">
           
           {/* Description */}
           <Card>
@@ -347,33 +480,35 @@ export default function TicketDetailPage({
           {/* Ticket Info (Compact) */}
           <Card>
             <CardContent className="py-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
                 <div className="flex items-center gap-2">
-                  <User className="h-4 w-4 text-muted-foreground" />
-                  <div>
+                  <User className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <div className="min-w-0">
                     <p className="text-xs text-muted-foreground">Pemohon</p>
-                    <p className="font-medium">{ticket.customer?.name || ticket.customer_name || "-"}</p>
+                    <p className="font-medium truncate">{ticket.customer?.name || ticket.customer_name || "-"}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Building className="h-4 w-4 text-muted-foreground" />
-                  <div>
+                  <Building className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <div className="min-w-0">
                     <p className="text-xs text-muted-foreground">Department</p>
-                    <p className="font-medium">{ticket.department_name || "-"}</p>
+                    <p className="font-medium truncate">
+                      {ticket.department_name || ticket.department?.name || ticket.customer_department || "-"}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                  <div>
+                  <Users className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <div className="min-w-0">
                     <p className="text-xs text-muted-foreground">Tim</p>
-                    <p className="font-medium">{ticket.team?.name || "-"}</p>
+                    <p className="font-medium truncate">{ticket.team?.name || ticket.team_name || "-"}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <div>
+                  <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <div className="min-w-0">
                     <p className="text-xs text-muted-foreground">Dibuat</p>
-                    <p className="font-medium">{formatDate(ticket.create_date)}</p>
+                    <p className="font-medium truncate">{formatDate(ticket.create_date)}</p>
                   </div>
                 </div>
               </div>
@@ -388,14 +523,34 @@ export default function TicketDetailPage({
 
           {/* Odoo Context (for System tickets) */}
           {ticket.ticket_category_type === "system" && ticket.captured_url && (
-            <Card className="bg-blue-50/50 border-blue-100">
+            <Card className="bg-blue-50/50 border-blue-100 overflow-hidden">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm text-blue-900">Info Sistem</CardTitle>
               </CardHeader>
-              <CardContent className="text-sm space-y-1">
-                {ticket.captured_url && <p><span className="text-muted-foreground">URL:</span> {ticket.captured_url}</p>}
-                {ticket.captured_module && <p><span className="text-muted-foreground">Module:</span> {ticket.captured_module}</p>}
-                {ticket.captured_menu_path && <p><span className="text-muted-foreground">Menu:</span> {ticket.captured_menu_path}</p>}
+              <CardContent className="text-sm space-y-1.5">
+                {ticket.captured_url && (
+                  <div className="flex flex-col sm:flex-row sm:items-start gap-1">
+                    <span className="text-muted-foreground shrink-0">URL:</span>
+                    <a 
+                      href={ticket.captured_url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline break-all"
+                    >
+                      {ticket.captured_url}
+                    </a>
+                  </div>
+                )}
+                {ticket.captured_module && (
+                  <p className="break-words">
+                    <span className="text-muted-foreground">Module:</span> {ticket.captured_module}
+                  </p>
+                )}
+                {ticket.captured_menu_path && (
+                  <p className="break-words">
+                    <span className="text-muted-foreground">Menu:</span> {ticket.captured_menu_path}
+                  </p>
+                )}
               </CardContent>
             </Card>
           )}
@@ -421,20 +576,46 @@ export default function TicketDetailPage({
                     {activityLogs.map((log) => {
                       const bodyRaw = log.body_plain || log.body || ""
                       const { label, content } = formatActivityBody(bodyRaw)
+                      
+                      // Determine icon based on label
+                      const getIcon = (lbl: string | null) => {
+                        if (!lbl) return "📌"
+                        if (lbl.includes("Progress")) return "📋"
+                        if (lbl.includes("Diproses")) return "🔄"
+                        if (lbl.includes("Member")) return "👤"
+                        if (lbl.includes("Team")) return "👥"
+                        if (lbl.includes("Selesai")) return "✅"
+                        if (lbl.includes("Catatan")) return "📝"
+                        return "📌"
+                      }
+                      
                       return (
-                        <div key={log.id} className="p-4 hover:bg-muted/20 transition-colors">
+                        <div key={log.id} className="p-4 hover:bg-muted/30 transition-colors">
                           <div className="flex justify-between items-start gap-2">
                             <span className="text-sm font-medium text-foreground">{log.author?.name || "System"}</span>
                             <span className="text-xs text-muted-foreground shrink-0">{formatDate(log.date || log.create_date || "")}</span>
                           </div>
-                          {label && (
-                            <Badge variant="secondary" className="mt-1.5 text-xs font-normal bg-blue-100 text-blue-800 border-blue-200">
-                              {label}
-                            </Badge>
-                          )}
-                          <p className={`text-sm mt-1.5 ${label ? "text-foreground" : "text-muted-foreground"}`}>
-                            {content || messageToPlainText(bodyRaw)}
-                          </p>
+                          <div className="flex items-start gap-2 mt-2">
+                            <span className="text-base shrink-0">{getIcon(label)}</span>
+                            <div className="flex-1 min-w-0">
+                              {label && (
+                                <Badge variant="secondary" className="mb-1 text-xs font-medium bg-blue-100 text-blue-800 border-blue-200">
+                                  {label}
+                                </Badge>
+                              )}
+                              {(content || !label) && (
+                                <p className={`text-sm ${label ? "text-foreground" : "text-muted-foreground"} break-words`}>
+                                  {content || messageToPlainText(bodyRaw) || "—"}
+                                </p>
+                              )}
+                              {/* Show assigned member for Team Assignment */}
+                              {label === "Team Assignment" && (ticket.assigned_employee?.name || ticket.assigned_user?.name) && (
+                                <p className="text-sm text-green-600 mt-1 flex items-center gap-1">
+                                  <span>👤</span> Ditangani: <strong>{ticket.assigned_employee?.name || ticket.assigned_user?.name}</strong>
+                                </p>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       )
                     })}
@@ -514,7 +695,7 @@ export default function TicketDetailPage({
         </div>
 
         {/* Sidebar - Admin Actions */}
-        <div className="space-y-4">
+        <div className="space-y-4 order-1 lg:order-2">
           {isAdminUser && (
             <TicketAdminActions ticket={ticket} canModify={canModify} />
           )}

@@ -64,31 +64,31 @@ export function StatCard({
         `bg-gradient-to-br ${colors.gradient}`
       )}
     >
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2 px-3 sm:px-4 pt-3 sm:pt-4">
+        <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
           {title}
         </CardTitle>
-        <div className={cn("rounded-full p-2", colors.bg)}>
-          <Icon className={cn("h-4 w-4", colors.text)} />
+        <div className={cn("rounded-full p-1.5 sm:p-2", colors.bg)}>
+          <Icon className={cn("h-3 w-3 sm:h-4 sm:w-4", colors.text)} />
         </div>
       </CardHeader>
-      <CardContent>
-        <div className="text-3xl font-bold">{value}</div>
+      <CardContent className="px-3 sm:px-4 pb-3 sm:pb-4">
+        <div className="text-xl sm:text-3xl font-bold">{value}</div>
         {trend && (
           <div className="flex items-center gap-1 mt-1">
             <span
               className={cn(
-                "text-sm font-medium",
+                "text-xs sm:text-sm font-medium",
                 trend.isPositive ? "text-green-600" : "text-red-600"
               )}
             >
               {trend.isPositive ? "↗" : "↘"} {Math.abs(trend.value)}%
             </span>
-            <span className="text-xs text-muted-foreground">vs last week</span>
+            <span className="text-[10px] sm:text-xs text-muted-foreground hidden sm:inline">vs last week</span>
           </div>
         )}
         {subtitle && (
-          <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
+          <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">{subtitle}</p>
         )}
       </CardContent>
     </Card>

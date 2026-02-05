@@ -39,16 +39,16 @@ export function DashboardStats({ stats, isLoading }: DashboardStatsProps) {
 
   if (isLoading) {
     return (
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="h-32 animate-pulse rounded-lg bg-muted" />
+          <div key={i} className="h-24 sm:h-32 animate-pulse rounded-lg bg-muted" />
         ))}
       </div>
     )
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
       <StatCard
         title="Total Tiket"
         value={stats?.summary?.total || 0}

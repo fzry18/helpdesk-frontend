@@ -82,11 +82,31 @@ export default function DashboardPage() {
   const userStats = useMemo(() => {
     if (isAdmin) return null
     const raw = myTicketsData?.data
-    const payload = unwrapData<{ stats?: { total: number; open: number; closed: number }; tickets?: Ticket[] }>(raw)
+    const payload = unwrapData<{ stats?: { total: number; open: number; in_progress?: number; closed: number }; tickets?: Ticket[] }>(raw)
+    
+    // Use backend stats if available
+    if (payload?.stats) {
+      return {
+        total: payload.stats.total,
+        open: payload.stats.open,
+        inProgress: payload.stats.in_progress ?? 0,
+        closed: payload.stats.closed,
+      }
+    }
+    
+    // Fallback: calculate from tickets
     const tickets = payload && Array.isArray(payload.tickets) ? payload.tickets : []
     const sourceList = tickets.length > 0 ? tickets : recentTicketsList
     return computeUserStatsFromTickets(sourceList)
   }, [isAdmin, myTicketsData?.data, recentTicketsList])
+
+  // For user dashboard, use their own tickets from my-tickets API
+  const userTicketsList: Ticket[] = useMemo(() => {
+    if (isAdmin) return []
+    const raw = myTicketsData?.data
+    const payload = unwrapData<{ tickets?: Ticket[] }>(raw)
+    return payload && Array.isArray(payload.tickets) ? payload.tickets : []
+  }, [isAdmin, myTicketsData?.data])
 
   return (
     <div className="min-w-0 space-y-4 md:space-y-6">
@@ -115,12 +135,12 @@ export default function DashboardPage() {
 
       {isAdmin && (
         <>
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid gap-4 md:gap-6 grid-cols-1 lg:grid-cols-2">
             <TicketTrendChart isLoading={false} />
             <PriorityDistribution isLoading={false} />
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid gap-4 md:gap-6 grid-cols-1 lg:grid-cols-2">
             <UrgentTicketsSection
               tickets={urgentTickets}
               isLoading={recentLoading}
@@ -132,8 +152,8 @@ export default function DashboardPage() {
 
       <div className="w-full min-w-0 overflow-hidden">
         <RecentTickets
-          tickets={recentTicketsList}
-          isLoading={recentLoading}
+          tickets={isAdmin ? recentTicketsList : (userTicketsList.length > 0 ? userTicketsList : recentTicketsList)}
+          isLoading={isAdmin ? recentLoading : myTicketsLoading}
         />
       </div>
     </div>

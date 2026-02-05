@@ -79,6 +79,20 @@ export function RecentTickets({ tickets, isLoading }: RecentTicketsProps) {
     )
   }
 
+  // Get color config for column header based on status
+  const getColumnHeaderStyle = (status: "Open" | "In Progress" | "Closed") => {
+    switch (status) {
+      case "Open":
+        return "bg-blue-500 text-white"
+      case "In Progress":
+        return "bg-amber-500 text-white"
+      case "Closed":
+        return "bg-green-600 text-white"
+      default:
+        return "bg-gray-500 text-white"
+    }
+  }
+
   return (
     <Card className="w-full min-w-0 overflow-hidden">
       <CardHeader className="pb-2">
@@ -92,14 +106,14 @@ export function RecentTickets({ tickets, isLoading }: RecentTicketsProps) {
           {groupsByStatus.map(({ key, tickets: list, label }) => (
             <section
               key={key}
-              className="flex min-h-0 shrink-0 flex-col rounded-lg border bg-muted/20"
+              className="flex min-h-0 shrink-0 flex-col rounded-lg border overflow-hidden shadow-sm"
               style={{ minWidth: COLUMN_MIN_WIDTH }}
             >
-              <h3 className="shrink-0 border-b px-3 py-2 text-sm font-semibold text-muted-foreground">
-                {label} ({list.length})
+              <h3 className={`shrink-0 px-4 py-3 text-sm font-bold ${getColumnHeaderStyle(key)}`}>
+                {label} <span className="ml-1 px-2 py-0.5 rounded-full bg-white/20 text-xs font-semibold">{list.length}</span>
               </h3>
               <div
-                className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2"
+                className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2 bg-muted/20"
                 style={{ height: COLUMN_SCROLL_HEIGHT }}
               >
                 {list.length === 0 ? (

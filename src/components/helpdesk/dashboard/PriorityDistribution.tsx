@@ -1,30 +1,48 @@
 "use client"
 
+import { useQuery } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { dashboardAPI } from "@/lib/api/endpoints"
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts"
 
 interface PriorityDistributionProps {
-    data?: Array<{
-        name: string
-        value: number
-        color: string
-    }>
     isLoading?: boolean
 }
 
-// Mock data for demonstration
-const mockData = [
-    { name: "Very High", value: 8, color: "#EF4444" },
-    { name: "High", value: 15, color: "#F97316" },
-    { name: "Medium", value: 42, color: "#F59E0B" },
-    { name: "Low", value: 91, color: "#10B981" },
-]
+// Priority colors
+const PRIORITY_CONFIG = {
+    very_high: { name: "Sangat Tinggi", color: "#EF4444" },
+    high: { name: "Tinggi", color: "#F97316" },
+    normal: { name: "Normal", color: "#F59E0B" },
+    low: { name: "Rendah", color: "#10B981" },
+    very_low: { name: "Sangat Rendah", color: "#6B7280" },
+}
 
 export function PriorityDistribution({
-    data = mockData,
-    isLoading = false,
+    isLoading: externalLoading = false,
 }: PriorityDistributionProps) {
+    const { data: statsResponse, isLoading: statsLoading } = useQuery({
+        queryKey: ["dashboard", "stats"],
+        queryFn: () => dashboardAPI.getStats(),
+    })
+
+    const isLoading = externalLoading || statsLoading
+
+    // Transform API data for chart
+    const priorityData = statsResponse?.data?.by_priority
+    const chartData = priorityData
+        ? Object.entries(priorityData)
+              .filter(([_, value]) => (value as number) > 0)
+              .map(([key, value]) => ({
+                  name: PRIORITY_CONFIG[key as keyof typeof PRIORITY_CONFIG]?.name || key,
+                  value: value as number,
+                  color: PRIORITY_CONFIG[key as keyof typeof PRIORITY_CONFIG]?.color || "#6B7280",
+              }))
+        : []
+
+    const total = chartData.reduce((sum, item) => sum + item.value, 0)
+
     if (isLoading) {
         return (
             <Card>
@@ -38,7 +56,21 @@ export function PriorityDistribution({
         )
     }
 
-    const total = data.reduce((sum, item) => sum + item.value, 0)
+    if (chartData.length === 0) {
+        return (
+            <Card>
+                <CardHeader>
+                    <CardTitle>Distribusi Prioritas</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                        Tidak ada data tiket
+                    </p>
+                </CardHeader>
+                <CardContent className="flex h-[300px] items-center justify-center">
+                    <p className="text-muted-foreground">Belum ada tiket</p>
+                </CardContent>
+            </Card>
+        )
+    }
 
     return (
         <Card>
@@ -52,7 +84,7 @@ export function PriorityDistribution({
                 <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
                         <Pie
-                            data={data}
+                            data={chartData}
                             cx="50%"
                             cy="50%"
                             innerRadius={60}
@@ -63,7 +95,7 @@ export function PriorityDistribution({
                                 `${name} ${percent ? (percent * 100).toFixed(0) : 0}%`
                             }
                         >
-                            {data.map((entry, index) => (
+                            {chartData.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={entry.color} />
                             ))}
                         </Pie>
@@ -77,7 +109,7 @@ export function PriorityDistribution({
                     </PieChart>
                 </ResponsiveContainer>
                 <div className="mt-4 grid grid-cols-2 gap-2">
-                    {data.map((item, index) => (
+                    {chartData.map((item, index) => (
                         <div key={index} className="flex items-center gap-2 text-sm">
                             <div
                                 className="h-3 w-3 rounded-full"

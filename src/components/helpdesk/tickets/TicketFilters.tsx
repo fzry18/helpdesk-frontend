@@ -46,15 +46,15 @@ export function TicketFilters({ onFilterChange }: TicketFiltersProps) {
   }
 
   return (
-    <div className="rounded-lg border bg-card p-4">
-      <div className="flex flex-nowrap items-center gap-3">
+    <div className="rounded-lg border bg-card p-3 md:p-4">
+      <div className="flex flex-wrap items-center gap-2 md:gap-3">
         <Select
           value={status}
           onValueChange={setStatus}
           open={openFilter === "status"}
           onOpenChange={(open) => setOpenFilter(open ? "status" : null)}
         >
-          <SelectTrigger className="w-[160px] shrink-0">
+          <SelectTrigger className="w-full sm:w-[140px] md:w-[160px]">
             <SelectValue placeholder="Status Tiket" />
           </SelectTrigger>
           <SelectContent>
@@ -71,7 +71,7 @@ export function TicketFilters({ onFilterChange }: TicketFiltersProps) {
           open={openFilter === "type"}
           onOpenChange={(open) => setOpenFilter(open ? "type" : null)}
         >
-          <SelectTrigger className="w-[160px] shrink-0">
+          <SelectTrigger className="w-[calc(50%-4px)] sm:w-[140px] md:w-[160px]">
             <SelectValue placeholder="Tipe Tiket" />
           </SelectTrigger>
           <SelectContent>
@@ -87,7 +87,7 @@ export function TicketFilters({ onFilterChange }: TicketFiltersProps) {
           open={openFilter === "priority"}
           onOpenChange={(open) => setOpenFilter(open ? "priority" : null)}
         >
-          <SelectTrigger className="w-[160px] shrink-0">
+          <SelectTrigger className="w-[calc(50%-4px)] sm:w-[140px] md:w-[160px]">
             <SelectValue placeholder="Prioritas" />
           </SelectTrigger>
           <SelectContent>
@@ -100,7 +100,7 @@ export function TicketFilters({ onFilterChange }: TicketFiltersProps) {
           </SelectContent>
         </Select>
 
-        <Button variant="outline" onClick={clearFilters} size="sm" className="shrink-0">
+        <Button variant="outline" onClick={clearFilters} size="sm" className="w-full sm:w-auto">
           <X className="h-4 w-4 mr-2" />
           Reset
         </Button>

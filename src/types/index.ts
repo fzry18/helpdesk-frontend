@@ -42,6 +42,10 @@ export interface Ticket {
   /** Admin sudah selesai, menunggu user konfirmasi */
   waiting_user_confirmation?: boolean
   resolution_confirmed?: boolean
+  /** Rejection fields - ticket ditolak oleh admin */
+  is_rejected?: boolean
+  rejection_reason?: string | null
+  rejected_date?: string | null
   stage?: { id: number; name: string; actual_name?: string } | null
   team?: { id: number; name: string } | null
   category?: { id: number; name: string } | null

@@ -16,9 +16,9 @@ interface UserDashboardStatsProps {
 export function UserDashboardStats({ stats, isLoading }: UserDashboardStatsProps) {
   if (isLoading) {
     return (
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="h-32 animate-pulse rounded-lg bg-muted" />
+          <div key={i} className="h-24 sm:h-32 animate-pulse rounded-lg bg-muted" />
         ))}
       </div>
     )
@@ -30,7 +30,7 @@ export function UserDashboardStats({ stats, isLoading }: UserDashboardStatsProps
   const closed = stats?.closed ?? 0
 
   return (
-    <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
       <StatCard title="Total Ticket" value={total} icon={Ticket} color="blue" />
       <StatCard title="Terbuka" value={open} icon={AlertCircle} color="orange" />
       <StatCard title="In Progress" value={inProgress} icon={Clock} color="purple" />

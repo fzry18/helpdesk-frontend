@@ -137,6 +137,12 @@ export const ticketAPI = {
       message: message || "",
     }),
 
+  /** Admin: langsung close ticket tanpa konfirmasi user */
+  closeTicket: (id: number, message?: string) =>
+    apiClient.post<ApiResponse<Ticket>>(`/tickets/${id}/close`, {
+      message: message || "",
+    }),
+
   /** User: konfirmasi ticket sudah teratasi */
   confirmResolved: (
     id: number,
@@ -181,6 +187,23 @@ export const ticketAPI = {
     apiClient.post<
       ApiResponse<Ticket[]> & { meta?: PaginationMeta }
     >("/tickets/search", body),
+
+  // ============================================
+  // REJECT & PRIORITY ENDPOINTS
+  // ============================================
+
+  /** Admin: Reject ticket dengan alasan */
+  rejectTicket: (id: number, reason: string) =>
+    apiClient.post<ApiResponse<Ticket>>(`/tickets/${id}/reject`, {
+      reason,
+    }),
+
+  /** Admin: Set priority ticket (0-4) */
+  setPriority: (id: number, priority: string) =>
+    apiClient.post<ApiResponse<{ id: number; priority: string; priority_label: string }>>(
+      `/tickets/${id}/priority`,
+      { priority }
+    ),
 }
 
 // ============================================
@@ -375,13 +398,17 @@ interface CategoryStats {
 
 interface TrendData {
   date: string
-  count: number
+  full_date?: string
+  count?: number
+  created: number
+  resolved: number
 }
 
 interface MyTicketsResponse {
   stats: {
     total: number
     open: number
+    in_progress: number
     closed: number
   }
   tickets: Ticket[]

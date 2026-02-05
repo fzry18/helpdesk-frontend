@@ -13,60 +13,108 @@ interface TicketCardProps {
   ticket: Ticket
 }
 
+// Priority config sesuai dengan Odoo: 0=Very Low, 1=Low, 2=Normal, 3=High, 4=Very High
 const getPriorityConfig = (priority: string | boolean | undefined | null) => {
-  const value = typeof priority === "string" ? priority : typeof priority === "number" ? String(priority) : ""
+  const value = typeof priority === "string" ? priority : typeof priority === "number" ? String(priority) : "2"
   switch (value) {
     case "4":
       return {
-        color: "bg-red-100 text-red-800 border-red-200",
+        color: "bg-red-100 text-red-700 border-red-300",
         dot: "bg-red-500",
         label: "Very High",
       }
     case "3":
       return {
-        color: "bg-orange-100 text-orange-800 border-orange-200",
+        color: "bg-orange-100 text-orange-700 border-orange-300",
         dot: "bg-orange-500",
         label: "High",
       }
     case "2":
       return {
-        color: "bg-amber-100 text-amber-800 border-amber-200",
-        dot: "bg-amber-500",
-        label: "Medium",
+        color: "bg-yellow-50 text-yellow-700 border-yellow-300",
+        dot: "bg-yellow-400",
+        label: "Normal",
       }
     case "1":
       return {
-        color: "bg-yellow-100 text-yellow-800 border-yellow-200",
-        dot: "bg-yellow-500",
+        color: "bg-green-50 text-green-700 border-green-300",
+        dot: "bg-green-400",
         label: "Low",
+      }
+    case "0":
+      return {
+        color: "bg-gray-100 text-gray-600 border-gray-300",
+        dot: "bg-gray-400",
+        label: "Very Low",
       }
     default:
       return {
-        color: "bg-gray-100 text-gray-800 border-gray-200",
-        dot: "bg-gray-500",
+        color: "bg-yellow-50 text-yellow-700 border-yellow-300",
+        dot: "bg-yellow-400",
         label: "Normal",
       }
   }
 }
 
+// Helper untuk mendapatkan label sistem
+const getSystemLabel = (systemCategory: string | null | undefined): string => {
+  switch (systemCategory) {
+    case "odoo":
+      return "Odoo ERP"
+    case "p2h":
+      return "Web P2H"
+    case "job_portal":
+      return "Job Portal"
+    case "other":
+      return "Sistem Lainnya"
+    default:
+      return ""
+  }
+}
+
+// Helper untuk warna sistem badge
+const getSystemBadgeStyle = (systemCategory: string | null | undefined): string => {
+  switch (systemCategory) {
+    case "odoo":
+      return "bg-purple-100 text-purple-700 border-purple-300"
+    case "p2h":
+      return "bg-blue-100 text-blue-700 border-blue-300"
+    case "job_portal":
+      return "bg-teal-100 text-teal-700 border-teal-300"
+    case "other":
+      return "bg-gray-100 text-gray-700 border-gray-300"
+    default:
+      return "bg-gray-100 text-gray-600 border-gray-200"
+  }
+}
+
 const getStageConfig = (stage: string | undefined) => {
   const stageLower = stage?.toLowerCase() || ""
-  if (stageLower.includes("new") || stageLower.includes("baru")) {
-    return "bg-gray-100 text-gray-700 border-gray-200"
+  // Sent/Draft - Blue (new tickets)
+  if (stageLower.includes("new") || stageLower.includes("baru") || stageLower === "sent" || stageLower === "draft") {
+    return "bg-blue-500 text-white border-blue-600"
   }
+  // In Progress - Amber/Yellow
   if (stageLower.includes("progress") || stageLower.includes("proses")) {
-    return "bg-blue-100 text-blue-700 border-blue-200"
+    return "bg-amber-500 text-white border-amber-600"
   }
-  if (stageLower.includes("pending") || stageLower.includes("tunggu")) {
-    return "bg-amber-100 text-amber-700 border-amber-200"
+  // Pending/Waiting - Orange
+  if (stageLower.includes("pending") || stageLower.includes("tunggu") || stageLower.includes("awaiting") || stageLower.includes("menunggu")) {
+    return "bg-orange-500 text-white border-orange-600"
   }
+  // Resolved - Light Green
   if (stageLower.includes("resolved") || stageLower.includes("selesai")) {
-    return "bg-green-100 text-green-700 border-green-200"
+    return "bg-emerald-500 text-white border-emerald-600"
   }
+  // Closed - Green
   if (stageLower.includes("closed") || stageLower.includes("tutup")) {
-    return "bg-slate-100 text-slate-700 border-slate-200"
+    return "bg-green-600 text-white border-green-700"
   }
-  return "bg-gray-100 text-gray-700 border-gray-200"
+  // Rejected - Red
+  if (stageLower.includes("reject") || stageLower.includes("tolak")) {
+    return "bg-red-600 text-white border-red-700"
+  }
+  return "bg-gray-500 text-white border-gray-600"
 }
 
 const getInitials = (name: string) => {
@@ -80,10 +128,31 @@ const getInitials = (name: string) => {
 
 export function TicketCard({ ticket }: TicketCardProps) {
   const priorityConfig = getPriorityConfig(ticket.priority)
-  const stageName = typeof ticket.stage === "string"
-    ? ticket.stage
-    : ticket.stage?.name || ticket.stage_name || "Unknown"
-  const stageColor = getStageConfig(stageName)
+  
+  // Get stage name - handle all possible cases
+  // Backend should return stage.name = "Sent" for users when stage is Draft or missing
+  const stageName = (() => {
+    // Check stage object first
+    if (ticket.stage && typeof ticket.stage === "object" && ticket.stage.name) {
+      return ticket.stage.name
+    }
+    // Fallback to stage_name
+    if (ticket.stage_name) {
+      return ticket.stage_name
+    }
+    // If stage is a string directly
+    if (typeof ticket.stage === "string" && ticket.stage) {
+      return ticket.stage
+    }
+    // Final fallback - "Sent" for user-created tickets
+    return "Sent"
+  })()
+  
+  // Override stage name if rejected
+  const displayStageName = ticket.is_rejected ? "Ditolak" : stageName
+  const stageColor = ticket.is_rejected 
+    ? "bg-red-600 text-white border-red-700" 
+    : getStageConfig(stageName)
 
   return (
     <Link href={`/tickets/${ticket.id}`}>
@@ -93,39 +162,37 @@ export function TicketCard({ ticket }: TicketCardProps) {
         "border-l-4",
         priorityConfig.dot.replace("bg-", "border-l-")
       )}>
-        <CardHeader className="pb-3">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex-1 space-y-1">
-              <div className="flex items-center gap-2">
-                <h3 className="font-semibold text-lg line-clamp-1 group-hover:text-primary transition-colors">
-                  {ticket.subject}
-                </h3>
-              </div>
+        <CardHeader className="pb-2 sm:pb-3 px-3 sm:px-4">
+          <div className="flex items-start justify-between gap-2 sm:gap-3">
+            <div className="flex-1 min-w-0 space-y-0.5 sm:space-y-1">
+              <h3 className="font-semibold text-base sm:text-lg line-clamp-2 sm:line-clamp-1 group-hover:text-primary transition-colors break-words">
+                {ticket.subject}
+              </h3>
               <p className="text-xs text-muted-foreground">
                 #{ticket.ticket_number}
               </p>
             </div>
-            <Badge variant="outline" className={cn("whitespace-nowrap", priorityConfig.color)}>
+            <Badge variant="outline" className={cn("whitespace-nowrap text-xs sm:text-sm shrink-0", priorityConfig.color)}>
               {ticket.priority_label || priorityConfig.label}
             </Badge>
           </div>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-2 sm:space-y-3 px-3 sm:px-4">
           {ticket.description && (
-            <p className="text-sm text-muted-foreground line-clamp-2">
+            <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2">
               {ticket.description}
             </p>
           )}
 
-          <div className="flex items-center gap-3">
-            <Avatar className="h-6 w-6 text-xs">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <Avatar className="h-5 w-5 sm:h-6 sm:w-6 text-xs">
               <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
                 {getInitials(
                   ticket.customer?.name || ticket.customer_name || ticket.created_by?.name || "U"
                 )}
               </AvatarFallback>
             </Avatar>
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-muted-foreground truncate max-w-[100px] sm:max-w-none">
               {ticket.customer?.name || ticket.customer_name || "Unknown"}
             </span>
             <span className="text-xs text-muted-foreground">•</span>
@@ -135,35 +202,50 @@ export function TicketCard({ ticket }: TicketCardProps) {
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-2 border-t">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary" className={cn("text-xs", stageColor)}>
-                {stageName}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-2 border-t">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+              {/* Status Badge - More prominent */}
+              <Badge 
+                variant="secondary" 
+                className={cn(
+                  "text-xs sm:text-sm font-semibold px-2 py-0.5 sm:px-3 sm:py-1",
+                  stageColor
+                )}
+              >
+                {displayStageName}
               </Badge>
+              {/* Ticket Type Badge - dengan detail sistem jika ada */}
               {ticket.ticket_category_type && (
-                <Badge variant="outline" className="text-xs">
-                  {ticket.ticket_category_type === "helper" ? "Helper" : "System"}
-                  {ticket.system_category && ` · ${ticket.system_category}`}
-                </Badge>
-              )}
-              {ticket.waiting_user_confirmation && !ticket.resolution_confirmed && (
-                <Badge variant="outline" className="text-xs bg-amber-50 text-amber-800 border-amber-200">
-                  Menunggu konfirmasi
+                <Badge 
+                  variant="outline" 
+                  className={cn(
+                    "text-xs font-medium px-2 py-0.5",
+                    ticket.ticket_category_type === "helper" 
+                      ? "bg-purple-50 text-purple-700 border-purple-200" 
+                      : "bg-cyan-50 text-cyan-700 border-cyan-200"
+                  )}
+                >
+                  {ticket.ticket_category_type === "helper" 
+                    ? "Helper" 
+                    : ticket.system_category 
+                      ? `System - ${getSystemLabel(ticket.system_category)}`
+                      : "System"
+                  }
                 </Badge>
               )}
             </div>
 
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2 sm:gap-3 text-xs text-muted-foreground">
               {(ticket.team?.name || ticket.team_name) && (
-                <div className="flex items-center gap-1">
-                  <Tag className="h-3 w-3" />
-                  {ticket.team?.name || ticket.team_name}
+                <div className="flex items-center gap-1 truncate max-w-[80px] sm:max-w-none">
+                  <Tag className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{ticket.team?.name || ticket.team_name}</span>
                 </div>
               )}
               {(ticket.assigned_employee?.name || ticket.assigned_user?.name || ticket.assigned_user_name) && (
-                <div className="flex items-center gap-1">
-                  <User className="h-3 w-3" />
-                  {ticket.assigned_employee?.name ?? ticket.assigned_user?.name ?? ticket.assigned_user_name}
+                <div className="flex items-center gap-1 truncate max-w-[80px] sm:max-w-none">
+                  <User className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{ticket.assigned_employee?.name ?? ticket.assigned_user?.name ?? ticket.assigned_user_name}</span>
                 </div>
               )}
             </div>

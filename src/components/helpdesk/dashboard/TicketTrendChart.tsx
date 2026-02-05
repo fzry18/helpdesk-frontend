@@ -1,7 +1,9 @@
 "use client"
 
+import { useQuery } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { dashboardAPI } from "@/lib/api/endpoints"
 import {
     LineChart,
     Line,
@@ -14,29 +16,27 @@ import {
 } from "recharts"
 
 interface TicketTrendChartProps {
-    data?: Array<{
-        date: string
-        created: number
-        resolved: number
-    }>
     isLoading?: boolean
 }
 
-// Mock data for demonstration
-const mockData = [
-    { date: "Jan 01", created: 12, resolved: 8 },
-    { date: "Jan 05", created: 15, resolved: 10 },
-    { date: "Jan 10", created: 18, resolved: 14 },
-    { date: "Jan 15", created: 14, resolved: 16 },
-    { date: "Jan 20", created: 20, resolved: 18 },
-    { date: "Jan 25", created: 16, resolved: 15 },
-    { date: "Jan 30", created: 22, resolved: 20 },
-]
-
 export function TicketTrendChart({
-    data = mockData,
-    isLoading = false,
+    isLoading: externalLoading = false,
 }: TicketTrendChartProps) {
+    const { data: trendsResponse, isLoading: trendsLoading } = useQuery({
+        queryKey: ["dashboard", "trends"],
+        queryFn: () => dashboardAPI.getTrends("month"),
+    })
+
+    // Transform API data for chart
+    const chartData = trendsResponse?.data
+        ? trendsResponse.data.map((item: { date: string; created: number; resolved: number }) => ({
+              date: item.date,
+              created: item.created,
+              resolved: item.resolved,
+          }))
+        : []
+
+    const isLoading = externalLoading || trendsLoading
     if (isLoading) {
         return (
             <Card>
@@ -60,7 +60,7 @@ export function TicketTrendChart({
             </CardHeader>
             <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={data}>
+                    <LineChart data={chartData}>
                         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                         <XAxis
                             dataKey="date"

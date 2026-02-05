@@ -8,11 +8,14 @@ import {
   Ticket,
   LogOut,
   User,
+  Menu,
+  X,
 } from "lucide-react"
 import { useAuthStore } from "@/store/authStore"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/hooks/use-toast"
+import { useState, useEffect } from "react"
 
 const menuItems = [
   {
@@ -31,6 +34,12 @@ export function Sidebar() {
   const pathname = usePathname()
   const { employee, logout, getDepartment, getJobTitle } = useAuthStore()
   const router = useRouter()
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+
+  // Close mobile menu on route change
+  useEffect(() => {
+    setIsMobileMenuOpen(false)
+  }, [pathname])
 
   // Gunakan employee saja (bukan user)
   const displayName = employee?.name || 'User'
@@ -46,10 +55,18 @@ export function Sidebar() {
     router.push("/login")
   }
 
-  return (
-    <div className="flex h-screen w-64 flex-col border-r bg-card">
-      <div className="flex h-16 items-center border-b px-6">
-        <h1 className="text-xl font-bold">Helpdesk System</h1>
+  const SidebarContent = () => (
+    <>
+      <div className="flex h-14 md:h-16 items-center justify-between border-b px-4 md:px-6">
+        <h1 className="text-lg md:text-xl font-bold">Helpdesk System</h1>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="md:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
+        >
+          <X className="h-5 w-5" />
+        </Button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
@@ -67,6 +84,7 @@ export function Sidebar() {
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                 )}
+                onClick={() => setIsMobileMenuOpen(false)}
               >
                 <Icon className="h-5 w-5" />
                 {item.title}
@@ -97,7 +115,46 @@ export function Sidebar() {
           Keluar
         </Button>
       </div>
-    </div>
+    </>
+  )
+
+  return (
+    <>
+      {/* Mobile Menu Button - Fixed position */}
+      <Button
+        variant="outline"
+        size="icon"
+        className="fixed top-3 left-3 z-50 md:hidden bg-background shadow-md"
+        onClick={() => setIsMobileMenuOpen(true)}
+      >
+        <Menu className="h-5 w-5" />
+      </Button>
+
+      {/* Mobile Sidebar Overlay */}
+      {isMobileMenuOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Mobile Sidebar */}
+      <div
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 w-64 transform bg-card transition-transform duration-200 ease-in-out md:hidden",
+          isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        <div className="flex h-full flex-col">
+          <SidebarContent />
+        </div>
+      </div>
+
+      {/* Desktop Sidebar */}
+      <div className="hidden md:flex h-screen w-64 flex-col border-r bg-card">
+        <SidebarContent />
+      </div>
+    </>
   )
 }
 
