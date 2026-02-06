@@ -1,5 +1,6 @@
 "use client"
 
+import React, { useCallback } from 'react'
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -8,9 +9,12 @@ import type { Ticket } from "@/types"
 import { Clock, User, Tag, MessageSquare, Paperclip } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
+import { useInView } from 'react-intersection-observer'
+import { usePrefetchTicket } from "@/hooks/use-ticket-queries"
 
 interface TicketCardProps {
   ticket: Ticket
+  index?: number
 }
 
 // Priority config sesuai dengan Odoo: 0=Very Low, 1=Low, 2=Normal, 3=High, 4=Very High
@@ -126,7 +130,19 @@ const getInitials = (name: string) => {
     .slice(0, 2)
 }
 
-export function TicketCard({ ticket }: TicketCardProps) {
+const TicketCardComponent = ({ ticket, index = 0 }: TicketCardProps) => {
+  const { ref, inView } = useInView({
+    threshold: 0.1,
+    rootMargin: '100px',
+    triggerOnce: true,
+  })
+
+  // Prefetch ticket detail on hover for faster navigation
+  const prefetchTicket = usePrefetchTicket()
+  const handlePrefetch = useCallback(() => {
+    prefetchTicket(ticket.id)
+  }, [prefetchTicket, ticket.id])
+
   const priorityConfig = getPriorityConfig(ticket.priority)
   
   // Get stage name - handle all possible cases
@@ -154,104 +170,125 @@ export function TicketCard({ ticket }: TicketCardProps) {
     ? "bg-red-600 text-white border-red-700" 
     : getStageConfig(stageName)
 
+  // Show skeleton if not in view
+  if (!inView) {
+    return (
+      <div ref={ref} className="h-[200px] animate-pulse bg-gray-100 rounded-lg">
+        <div className="p-4 space-y-3">
+          <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+          <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+          <div className="space-y-2">
+            <div className="h-3 bg-gray-200 rounded"></div>
+            <div className="h-3 bg-gray-200 rounded w-5/6"></div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <Link href={`/tickets/${ticket.id}`}>
-      <Card className={cn(
-        "group relative overflow-hidden transition-all duration-200",
-        "hover:shadow-lg hover:-translate-y-0.5 cursor-pointer",
-        "border-l-4",
-        priorityConfig.dot.replace("bg-", "border-l-")
-      )}>
-        <CardHeader className="pb-2 sm:pb-3 px-3 sm:px-4">
-          <div className="flex items-start justify-between gap-2 sm:gap-3">
-            <div className="flex-1 min-w-0 space-y-0.5 sm:space-y-1">
-              <h3 className="font-semibold text-base sm:text-lg line-clamp-2 sm:line-clamp-1 group-hover:text-primary transition-colors break-words">
-                {ticket.subject}
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                #{ticket.ticket_number}
-              </p>
-            </div>
-            <Badge variant="outline" className={cn("whitespace-nowrap text-xs sm:text-sm shrink-0", priorityConfig.color)}>
-              {ticket.priority_label || priorityConfig.label}
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-2 sm:space-y-3 px-3 sm:px-4">
-          {ticket.description && (
-            <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2">
-              {ticket.description}
-            </p>
-          )}
-
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <Avatar className="h-5 w-5 sm:h-6 sm:w-6 text-xs">
-              <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
-                {getInitials(
-                  ticket.customer?.name || ticket.customer_name || ticket.created_by?.name || "U"
-                )}
-              </AvatarFallback>
-            </Avatar>
-            <span className="text-xs text-muted-foreground truncate max-w-[100px] sm:max-w-none">
-              {ticket.customer?.name || ticket.customer_name || "Unknown"}
-            </span>
-            <span className="text-xs text-muted-foreground">•</span>
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Clock className="h-3 w-3" />
-              {formatRelativeTime(ticket.create_date)}
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-2 border-t">
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-              {/* Status Badge - More prominent */}
-              <Badge 
-                variant="secondary" 
-                className={cn(
-                  "text-xs sm:text-sm font-semibold px-2 py-0.5 sm:px-3 sm:py-1",
-                  stageColor
-                )}
-              >
-                {displayStageName}
+    <div ref={ref} onMouseEnter={handlePrefetch}>
+      <Link href={`/tickets/${ticket.id}`}>
+        <Card className={cn(
+          "group relative overflow-hidden transition-all duration-200",
+          "hover:shadow-lg hover:-translate-y-0.5 cursor-pointer",
+          "border-l-4",
+          priorityConfig.dot.replace("bg-", "border-l-")
+        )}>
+          <CardHeader className="pb-2 sm:pb-3 px-3 sm:px-4">
+            <div className="flex items-start justify-between gap-2 sm:gap-3">
+              <div className="flex-1 min-w-0 space-y-0.5 sm:space-y-1">
+                <h3 className="font-semibold text-base sm:text-lg line-clamp-2 sm:line-clamp-1 group-hover:text-primary transition-colors break-words">
+                  {ticket.subject}
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  #{ticket.ticket_number}
+                </p>
+              </div>
+              <Badge variant="outline" className={cn("whitespace-nowrap text-xs sm:text-sm shrink-0", priorityConfig.color)}>
+                {ticket.priority_label || priorityConfig.label}
               </Badge>
-              {/* Ticket Type Badge - dengan detail sistem jika ada */}
-              {ticket.ticket_category_type && (
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2 sm:space-y-3 px-3 sm:px-4">
+            {ticket.description && (
+              <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2">
+                {ticket.description}
+              </p>
+            )}
+
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              <Avatar className="h-5 w-5 sm:h-6 sm:w-6 text-xs">
+                <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
+                  {getInitials(
+                    ticket.customer?.name || ticket.customer_name || ticket.created_by?.name || "U"
+                  )}
+                </AvatarFallback>
+              </Avatar>
+              <span className="text-xs text-muted-foreground truncate max-w-[100px] sm:max-w-none">
+                {ticket.customer?.name || ticket.customer_name || "Unknown"}
+              </span>
+              <span className="text-xs text-muted-foreground">•</span>
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Clock className="h-3 w-3" />
+                {formatRelativeTime(ticket.create_date)}
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-2 border-t">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                {/* Status Badge - More prominent */}
                 <Badge 
-                  variant="outline" 
+                  variant="secondary" 
                   className={cn(
-                    "text-xs font-medium px-2 py-0.5",
-                    ticket.ticket_category_type === "helper" 
-                      ? "bg-purple-50 text-purple-700 border-purple-200" 
-                      : "bg-cyan-50 text-cyan-700 border-cyan-200"
+                    "text-xs sm:text-sm font-semibold px-2 py-0.5 sm:px-3 sm:py-1",
+                    stageColor
                   )}
                 >
-                  {ticket.ticket_category_type === "helper" 
-                    ? "Helper" 
-                    : ticket.system_category 
-                      ? `System - ${getSystemLabel(ticket.system_category)}`
-                      : "System"
-                  }
+                  {displayStageName}
                 </Badge>
-              )}
-            </div>
+                {/* Ticket Type Badge - dengan detail sistem jika ada */}
+                {ticket.ticket_category_type && (
+                  <Badge 
+                    variant="outline" 
+                    className={cn(
+                      "text-xs font-medium px-2 py-0.5",
+                      ticket.ticket_category_type === "helper" 
+                        ? "bg-purple-50 text-purple-700 border-purple-200" 
+                        : "bg-cyan-50 text-cyan-700 border-cyan-200"
+                    )}
+                  >
+                    {ticket.ticket_category_type === "helper" 
+                      ? "Helper" 
+                      : ticket.system_category 
+                        ? `System - ${getSystemLabel(ticket.system_category)}`
+                        : "System"
+                    }
+                  </Badge>
+                )}
+              </div>
 
-            <div className="flex items-center gap-2 sm:gap-3 text-xs text-muted-foreground">
-              {(ticket.team?.name || ticket.team_name) && (
-                <div className="flex items-center gap-1 truncate max-w-[80px] sm:max-w-none">
-                  <Tag className="h-3 w-3 shrink-0" />
-                  <span className="truncate">{ticket.team?.name || ticket.team_name}</span>
-                </div>
-              )}
-              {(ticket.assigned_employee?.name || ticket.assigned_user?.name || ticket.assigned_user_name) && (
-                <div className="flex items-center gap-1 truncate max-w-[80px] sm:max-w-none">
-                  <User className="h-3 w-3 shrink-0" />
-                  <span className="truncate">{ticket.assigned_employee?.name ?? ticket.assigned_user?.name ?? ticket.assigned_user_name}</span>
-                </div>
-              )}
+              <div className="flex items-center gap-2 sm:gap-3 text-xs text-muted-foreground">
+                {(ticket.team?.name || ticket.team_name) && (
+                  <div className="flex items-center gap-1 truncate max-w-[80px] sm:max-w-none">
+                    <Tag className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{ticket.team?.name || ticket.team_name}</span>
+                  </div>
+                )}
+                {(ticket.assigned_employee?.name || ticket.assigned_user?.name || ticket.assigned_user_name) && (
+                  <div className="flex items-center gap-1 truncate max-w-[80px] sm:max-w-none">
+                    <User className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{ticket.assigned_employee?.name ?? ticket.assigned_user?.name ?? ticket.assigned_user_name}</span>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
-    </Link>
+          </CardContent>
+        </Card>
+      </Link>
+    </div>
   )
 }
+
+// Memoize component to prevent unnecessary re-renders
+export const TicketCard = React.memo(TicketCardComponent)

@@ -493,7 +493,7 @@ export default function TicketDetailPage({
                   <div className="min-w-0">
                     <p className="text-xs text-muted-foreground">Department</p>
                     <p className="font-medium truncate">
-                      {ticket.department_name || ticket.department?.name || ticket.customer_department || "-"}
+                      {ticket.department_name || "-"}
                     </p>
                   </div>
                 </div>

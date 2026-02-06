@@ -25,6 +25,9 @@ export function TicketTrendChart({
     const { data: trendsResponse, isLoading: trendsLoading } = useQuery({
         queryKey: ["dashboard", "trends"],
         queryFn: () => dashboardAPI.getTrends("month"),
+        staleTime: 5 * 60 * 1000, // 5 min cache - chart data doesn't change often
+        refetchOnWindowFocus: false, // Don't refetch when tab regains focus
+        refetchOnMount: false, // Don't refetch if data exists
     })
 
     // Transform API data for chart

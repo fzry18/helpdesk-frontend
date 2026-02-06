@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import React, { useMemo, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { TicketCard } from "@/components/helpdesk/tickets/TicketCard"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -40,7 +40,8 @@ interface RecentTicketsProps {
   isLoading: boolean
 }
 
-export function RecentTickets({ tickets, isLoading }: RecentTicketsProps) {
+const RecentTicketsComponent = ({ tickets, isLoading }: RecentTicketsProps) => {
+  // Memoize expensive calculations
   const groupsByStatus = useMemo(() => {
     const groups: Record<"Open" | "In Progress" | "Closed", Ticket[]> = {
       Open: [],
@@ -71,7 +72,7 @@ export function RecentTickets({ tickets, isLoading }: RecentTicketsProps) {
         <CardContent>
           <div className="flex gap-4 overflow-x-auto pb-2">
             {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-[320px] shrink-0 rounded-lg" style={{ minWidth: COLUMN_MIN_WIDTH }} />
+              <div key={i} className="h-[320px] shrink-0 rounded-lg animate-pulse bg-muted" style={{ minWidth: COLUMN_MIN_WIDTH }} />
             ))}
           </div>
         </CardContent>
@@ -133,3 +134,6 @@ export function RecentTickets({ tickets, isLoading }: RecentTicketsProps) {
     </Card>
   )
 }
+
+// Export memoized component
+export const RecentTickets = React.memo(RecentTicketsComponent)

@@ -25,6 +25,9 @@ export function PriorityDistribution({
     const { data: statsResponse, isLoading: statsLoading } = useQuery({
         queryKey: ["dashboard", "stats"],
         queryFn: () => dashboardAPI.getStats(),
+        staleTime: 5 * 60 * 1000, // 5 min cache
+        refetchOnWindowFocus: false,
+        refetchOnMount: false,
     })
 
     const isLoading = externalLoading || statsLoading
