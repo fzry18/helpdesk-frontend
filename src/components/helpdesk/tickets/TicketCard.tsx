@@ -18,8 +18,8 @@ interface TicketCardProps {
 }
 
 // Priority config sesuai dengan Odoo: 0=Very Low, 1=Low, 2=Normal, 3=High, 4=Very High
-const getPriorityConfig = (priority: string | boolean | undefined | null) => {
-  const value = typeof priority === "string" ? priority : typeof priority === "number" ? String(priority) : "2"
+const getPriorityConfig = (priority: string | undefined | null) => {
+  const value = priority ?? "2"
   switch (value) {
     case "4":
       return {

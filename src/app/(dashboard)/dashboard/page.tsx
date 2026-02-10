@@ -2,6 +2,7 @@
 
 import React, { useMemo, useCallback, Suspense } from "react"
 import { useQuery } from "@tanstack/react-query"
+import { useRouter } from "next/navigation"
 import { dashboardAPI } from "@/lib/api/endpoints"
 import { useAuthStore, selectIsAdmin, selectHelpdeskRole } from "@/store/authStore"
 import { LazyDashboardStats, LazyUserDashboardStats, LazyRecentTickets, useLazyLoad } from "@/components/lazy/LazyComponents"
@@ -66,11 +67,75 @@ function computeUserStatsFromTickets(tickets: Ticket[]): { total: number; open: 
   return { total: tickets.length, open, inProgress, closed }
 }
 
+// Activity item type for timeline
+interface ActivityItem {
+  id: number
+  type: "ticket_created" | "ticket_assigned" | "ticket_closed" | "comment_added"
+  user: string
+  description: string
+  timestamp: string
+  ticketId?: number
+  ticketNumber?: string
+}
+
+// Transform tickets to activity items
+function transformTicketsToActivities(tickets: Ticket[]): ActivityItem[] {
+  const activities: ActivityItem[] = []
+  let idCounter = 1
+
+  for (const ticket of tickets) {
+    const userName = ticket.created_by?.name || ticket.customer_name || ticket.customer?.name || "Unknown"
+    const ticketNumber = ticket.ticket_number || `#${ticket.id}`
+    
+    // Add ticket_created activity
+    activities.push({
+      id: idCounter++,
+      type: "ticket_created",
+      user: userName,
+      description: "membuat tiket",
+      timestamp: ticket.create_date || new Date().toISOString(),
+      ticketId: ticket.id,
+      ticketNumber: ticketNumber,
+    })
+    
+    // Add ticket_closed activity if ticket is closed
+    const stageName = ((ticket.stage?.actual_name ?? ticket.stage?.name) ?? "").toString().toLowerCase()
+    if (stageName.includes("closed") || stageName.includes("selesai") || ticket.resolution_confirmed === true) {
+      const closedBy = ticket.assigned_employee?.name || ticket.created_by?.name || userName
+      activities.push({
+        id: idCounter++,
+        type: "ticket_closed",
+        user: closedBy,
+        description: "menutup tiket",
+        timestamp: ticket.write_date || ticket.create_date || new Date().toISOString(),
+        ticketId: ticket.id,
+        ticketNumber: ticketNumber,
+      })
+    }
+  }
+  
+  // Sort by timestamp descending and take top 10
+  return activities
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, 10)
+}
+
 export default function DashboardPage() {
   // Use selectors for optimized re-renders
   const isAdmin = useAuthStore(selectIsAdmin)
   const helpdeskRole = useAuthStore(selectHelpdeskRole)
   const isMobile = useIsMobile(768)
+  const router = useRouter()
+
+  const handleStatClick = useCallback((status: string) => {
+    if (status === "all") {
+      router.push("/tickets")
+    } else if (status === "today") {
+      router.push("/tickets?created_today=true")
+    } else {
+      router.push(`/tickets?status=${status}`)
+    }
+  }, [router])
 
   // Memoized query functions dengan standard API
   const getStats = useCallback(() => dashboardAPI.getStats(), [])
@@ -94,6 +159,7 @@ export default function DashboardPage() {
   const { data: recentData, isLoading: recentLoading } = useQuery({
     queryKey: ["dashboard", "recent", isAdmin],
     queryFn: getRecent,
+    enabled: isAdmin,
     staleTime: 1 * 60 * 1000, // 1 minute cache
   })
 
@@ -104,6 +170,12 @@ export default function DashboardPage() {
 
   const urgentTickets = useMemo(
     () => recentTicketsList.filter((t) => t.priority === "3" || t.priority === "4"),
+    [recentTicketsList]
+  )
+
+  // Transform tickets to activity items for timeline
+  const activityItems = useMemo(
+    () => transformTicketsToActivities(recentTicketsList),
     [recentTicketsList]
   )
 
@@ -124,9 +196,8 @@ export default function DashboardPage() {
     
     // Fallback: calculate from tickets
     const tickets = payload && Array.isArray(payload.tickets) ? payload.tickets : []
-    const sourceList = tickets.length > 0 ? tickets : recentTicketsList
-    return computeUserStatsFromTickets(sourceList)
-  }, [isAdmin, myTicketsData?.data, recentTicketsList])
+    return computeUserStatsFromTickets(tickets)
+  }, [isAdmin, myTicketsData?.data])
 
   // For user dashboard, use their own tickets from my-tickets API
   const userTicketsList: Ticket[] = useMemo(() => {
@@ -153,6 +224,7 @@ export default function DashboardPage() {
         <LazyDashboardStats
           stats={unwrapData(statsData?.data) || null}
           isLoading={statsLoading}
+          onStatClick={handleStatClick}
         />
       )}
 
@@ -224,7 +296,7 @@ export default function DashboardPage() {
               />
             </LazyChartWrapper>
             <LazyChartWrapper height="500px" delay={150} mobileDelay={1000}>
-              <LazyActivityTimeline isLoading={false} />
+              <LazyActivityTimeline activities={activityItems} isLoading={recentLoading} />
             </LazyChartWrapper>
           </div>
         </DeferredRender>
@@ -232,7 +304,7 @@ export default function DashboardPage() {
 
       <div className="w-full min-w-0 overflow-hidden">
         <LazyRecentTickets
-          tickets={isAdmin ? recentTicketsList : (userTicketsList.length > 0 ? userTicketsList : recentTicketsList)}
+          tickets={isAdmin ? recentTicketsList : userTicketsList}
           isLoading={isAdmin ? recentLoading : myTicketsLoading}
         />
       </div>

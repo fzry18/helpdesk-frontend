@@ -12,9 +12,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/hooks/use-toast"
+import { getErrorMessage } from "@/lib/constants/error-messages"
 import { 
   UserPlus, CheckCircle, Loader2, Play, Users, 
   ClipboardList, Send, User, Settings, XCircle, AlertTriangle
@@ -46,9 +55,11 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
   const [confirmMessage, setConfirmMessage] = useState("")
   const [activityContent, setActivityContent] = useState("")
   const [rejectReason, setRejectReason] = useState("")
-  const [showRejectForm, setShowRejectForm] = useState(false)
+  const [showRejectDialog, setShowRejectDialog] = useState(false)
+  const [showProcessDialog, setShowProcessDialog] = useState(false)
+  const [showCloseDialog, setShowCloseDialog] = useState(false)
   const [selectedPriority, setSelectedPriority] = useState<string>(
-    typeof ticket.priority === 'string' ? ticket.priority : "2"
+    ticket.priority ?? ""
   )
 
   // Sinkronkan dropdown team dan member dengan data ticket terbaru (dari server)
@@ -65,8 +76,7 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
 
   // Sync priority with ticket data
   useEffect(() => {
-    const priorityValue = typeof ticket.priority === 'string' ? ticket.priority : "2"
-    setSelectedPriority(priorityValue)
+    setSelectedPriority(ticket.priority ?? "")
   }, [ticket.priority])
 
   // Fetch teams
@@ -118,6 +128,27 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
   
   const isAwaitingConfirmation = ticket.waiting_user_confirmation && !ticket.resolution_confirmed
 
+  // ====== WORKFLOW GUARDS ======
+  const canDraftAction = isDraft && !isClosed && !ticket.is_rejected && !isInProgress
+  const hasTeam = !!teamId
+  const hasAssignee = !!(ticket.assigned_employee?.id || ticket.assigned_user?.id)
+  const canCloseTicket = !isClosed && !isDraft && !ticket.is_rejected && hasTeam && hasAssignee
+  // Syarat yang belum terpenuhi untuk close
+  const closeMissingItems: string[] = []
+  if (!hasTeam) closeMissingItems.push("Team belum di-assign")
+  if (!hasAssignee) closeMissingItems.push("Member/PIC belum di-assign")
+
+  // Auto-close dialogs jika ticket berubah state
+  useEffect(() => {
+    if (!isDraft || ticket.is_rejected) {
+      setShowRejectDialog(false)
+      setShowProcessDialog(false)
+    }
+    if (isClosed || ticket.is_rejected) {
+      setShowCloseDialog(false)
+    }
+  }, [isDraft, isClosed, ticket.is_rejected])
+
   // ============================================
   // MUTATIONS
   // ============================================
@@ -132,7 +163,7 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
     onError: (error: any) => {
       toast({
         title: "Gagal",
-        description: error.response?.data?.message || "Gagal membuka ticket",
+        description: getErrorMessage(error),
         variant: "destructive",
       })
     },
@@ -149,7 +180,7 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
     onError: (error: any) => {
       toast({
         title: "Gagal",
-        description: error.response?.data?.message || "Gagal assign team",
+        description: getErrorMessage(error),
         variant: "destructive",
       })
     },
@@ -165,7 +196,7 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
     onError: (error: any) => {
       toast({
         title: "Gagal",
-        description: error.response?.data?.error?.message || error.response?.data?.message || "Gagal assign member",
+        description: getErrorMessage(error),
         variant: "destructive",
       })
     },
@@ -181,7 +212,7 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
     onError: (error: any) => {
       toast({
         title: "Gagal",
-        description: error.response?.data?.error?.message || error.response?.data?.message || "Gagal assign member",
+        description: getErrorMessage(error),
         variant: "destructive",
       })
     },
@@ -197,7 +228,7 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
     onError: (error: any) => {
       toast({
         title: "Gagal",
-        description: error.response?.data?.message || "Gagal assign ticket",
+        description: getErrorMessage(error),
         variant: "destructive",
       })
     },
@@ -215,7 +246,7 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
     onError: (error: any) => {
       toast({
         title: "Gagal",
-        description: error.response?.data?.message || "Gagal menambah log",
+        description: getErrorMessage(error),
         variant: "destructive",
       })
     },
@@ -232,7 +263,7 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
     onError: (error: any) => {
       toast({
         title: "Gagal",
-        description: error.response?.data?.message || "Gagal menutup ticket",
+        description: getErrorMessage(error),
         variant: "destructive",
       })
     },
@@ -245,13 +276,13 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
       queryClient.invalidateQueries({ queryKey: ["ticket", ticket.id] })
       queryClient.invalidateQueries({ queryKey: ["tickets"] })
       setRejectReason("")
-      setShowRejectForm(false)
+      setShowRejectDialog(false)
       toast({ title: "Berhasil", description: "Ticket telah ditolak" })
     },
     onError: (error: any) => {
       toast({
         title: "Gagal",
-        description: error.response?.data?.message || "Gagal menolak ticket",
+        description: getErrorMessage(error),
         variant: "destructive",
       })
     },
@@ -271,7 +302,7 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
     onError: (error: any) => {
       toast({
         title: "Gagal",
-        description: error.response?.data?.message || "Gagal mengubah priority",
+        description: getErrorMessage(error),
         variant: "destructive",
       })
     },
@@ -282,7 +313,7 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
   // ============================================
 
   const handleOpenTicket = () => {
-    if (canModify) openTicket.mutate(undefined)
+    if (canModify) setShowProcessDialog(true)
   }
 
   const handleTeamChange = (value: string) => {
@@ -361,35 +392,30 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
         
         {/* Status Info */}
         {isClosed && (
-          <div className="p-3 rounded-lg bg-green-50 border border-green-200">
-            <p className="text-sm font-medium text-green-800">✅ Ticket selesai</p>
-          </div>
-        )}
-
-        {/* 1. Open/Progress Ticket */}
-        {isDraft && !isClosed && !ticket.is_rejected && (
-          <div className="p-3 rounded-lg border-2 border-dashed border-primary/30 bg-primary/5">
-            <Button
-              onClick={handleOpenTicket}
-              disabled={openTicket.isPending}
-              className="w-full transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]"
-              size="lg"
-            >
-              {openTicket.isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Play className="mr-2 h-4 w-4" />
-              )}
-              Proses Ticket Ini
-            </Button>
-            <p className="text-xs text-center text-muted-foreground mt-2">
-              Klik untuk mulai memproses (Draft → In Progress)
+          <div className="p-3 rounded-lg bg-green-50 border border-green-200 space-y-1">
+            <p className="text-sm font-semibold text-green-800">✅ Ticket Selesai</p>
+            <p className="text-xs text-green-700">
+              Diselesaikan pada:{" "}
+              <span className="font-medium">
+                {ticket.end_date 
+                  ? new Date(ticket.end_date).toLocaleDateString("id-ID", {
+                      weekday: "long", day: "numeric", month: "long", year: "numeric",
+                      hour: "2-digit", minute: "2-digit"
+                    })
+                  : ticket.write_date
+                    ? new Date(ticket.write_date).toLocaleDateString("id-ID", {
+                        weekday: "long", day: "numeric", month: "long", year: "numeric",
+                        hour: "2-digit", minute: "2-digit"
+                      })
+                    : "-"
+                }
+              </span>
             </p>
           </div>
         )}
 
-        {/* Set Priority - untuk ticket yang belum diproses */}
-        {isDraft && !isClosed && !ticket.is_rejected && (
+        {/* 1. Set Priority - PALING ATAS (harus di-set dulu) */}
+        {canDraftAction && (
           <div className="space-y-2 p-3 rounded-lg bg-amber-50/50 border border-amber-200">
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-amber-600" />
@@ -400,7 +426,7 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
             </p>
             <Select value={selectedPriority} onValueChange={handlePriorityChange}>
               <SelectTrigger disabled={setPriority.isPending} className="bg-white">
-                <SelectValue placeholder="Pilih priority..." />
+                <SelectValue placeholder="Belum di-set (wajib)" />
               </SelectTrigger>
               <SelectContent>
                 {PRIORITY_OPTIONS.map((opt) => (
@@ -415,64 +441,43 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
           </div>
         )}
 
-        {/* Reject Ticket - untuk ticket yang belum diproses */}
-        {isDraft && !isClosed && !ticket.is_rejected && (
-          <div className="space-y-2 p-3 rounded-lg bg-red-50/50 border border-red-200">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <XCircle className="h-4 w-4 text-red-600" />
-                <span className="text-sm font-medium text-red-900">Tolak Ticket</span>
-              </div>
-              {!showRejectForm && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowRejectForm(true)}
-                  className="text-red-600 hover:text-red-700 hover:bg-red-100"
-                >
-                  Tolak
-                </Button>
-              )}
+        {/* 2. Tolak Ticket */}
+        {canDraftAction && (
+          <div className="flex items-center justify-between p-3 rounded-lg bg-red-50/50 border border-red-200">
+            <div className="flex items-center gap-2">
+              <XCircle className="h-4 w-4 text-red-600" />
+              <span className="text-sm font-medium text-red-900">Tolak Ticket</span>
             </div>
-            
-            {showRejectForm && (
-              <div className="space-y-2">
-                <Textarea
-                  placeholder="Alasan penolakan (wajib diisi)..."
-                  value={rejectReason}
-                  onChange={(e) => setRejectReason(e.target.value)}
-                  rows={3}
-                  disabled={rejectTicket.isPending}
-                  className="bg-white text-sm"
-                />
-                <div className="flex gap-2">
-                  <Button
-                    onClick={handleRejectTicket}
-                    disabled={rejectTicket.isPending || !rejectReason.trim()}
-                    variant="destructive"
-                    size="sm"
-                    className="flex-1"
-                  >
-                    {rejectTicket.isPending ? (
-                      <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                    ) : (
-                      <XCircle className="mr-2 h-3 w-3" />
-                    )}
-                    Konfirmasi Tolak
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setShowRejectForm(false)
-                      setRejectReason("")
-                    }}
-                    disabled={rejectTicket.isPending}
-                  >
-                    Batal
-                  </Button>
-                </div>
-              </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowRejectDialog(true)}
+              className="text-red-600 hover:text-red-700 hover:bg-red-100"
+            >
+              Tolak
+            </Button>
+          </div>
+        )}
+
+        {/* 3. Proses Ticket PALING BAWAH */}
+        {canDraftAction && (
+          <div className="p-3 rounded-lg border-2 border-dashed border-primary/30 bg-primary/5">
+            <Button
+              onClick={() => setShowProcessDialog(true)}
+              disabled={openTicket.isPending || !selectedPriority}
+              className="w-full transition-all"
+              size="lg"
+            >
+              <Play className="mr-2 h-4 w-4" />
+              Proses Ticket Ini
+            </Button>
+            <p className="text-xs text-center text-muted-foreground mt-2">
+              Draft → In Progress
+            </p>
+            {!selectedPriority && (
+              <p className="text-xs text-center text-amber-600 mt-1">
+                ⚠️ Set priority terlebih dahulu
+              </p>
             )}
           </div>
         )}
@@ -491,14 +496,17 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
             )}
             {ticket.rejected_date && (
               <p className="text-xs text-red-600 mt-1">
-                Ditolak pada: {new Date(ticket.rejected_date).toLocaleString('id-ID')}
+                Ditolak pada: {new Date(ticket.rejected_date).toLocaleDateString("id-ID", {
+                  weekday: "long", day: "numeric", month: "long", year: "numeric",
+                  hour: "2-digit", minute: "2-digit"
+                })}
               </p>
             )}
           </div>
         )}
 
         {/* 2. Assign Team & Member */}
-        {!isClosed && (
+        {!isClosed && !ticket.is_rejected && (
           <div className="space-y-3 p-3 rounded-lg bg-muted/30">
             <div className="flex items-center gap-2 mb-2">
               <Users className="h-4 w-4 text-primary" />
@@ -636,21 +644,32 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
         )}
 
         {/* 4. Close/Complete Ticket */}
-        {!isClosed && !isDraft && (
+        {!isClosed && !isDraft && !ticket.is_rejected && (
           <div className="space-y-2 pt-3 border-t">
             <Label className="text-sm font-medium">Selesaikan Ticket</Label>
+
+            {/* Warning syarat belum terpenuhi */}
+            {closeMissingItems.length > 0 && (
+              <div className="p-2 rounded-lg bg-amber-50 border border-amber-200">
+                <p className="text-xs font-medium text-amber-800 mb-1">⚠️ Syarat belum terpenuhi:</p>
+                <ul className="text-xs text-amber-700 list-disc list-inside">
+                  {closeMissingItems.map((item, i) => <li key={i}>{item}</li>)}
+                </ul>
+              </div>
+            )}
+
             <Textarea
-              placeholder="Catatan penutupan (opsional, bisa juga tulis di Obrolan)..."
+              placeholder="Catatan penutupan (opsional)..."
               value={confirmMessage}
               onChange={(e) => setConfirmMessage(e.target.value)}
               rows={2}
-              disabled={closeTicket.isPending}
+              disabled={closeTicket.isPending || !canCloseTicket}
               className="text-sm"
             />
             <Button
-              onClick={handleCloseTicket}
-              disabled={closeTicket.isPending}
-              className="w-full bg-green-600 hover:bg-green-700 transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]"
+              onClick={() => setShowCloseDialog(true)}
+              disabled={closeTicket.isPending || !canCloseTicket}
+              className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
               variant="default"
             >
               {closeTicket.isPending ? (
@@ -660,13 +679,147 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
               )}
               Selesaikan Ticket
             </Button>
-            <p className="text-xs text-center text-muted-foreground">
-              Ticket akan langsung ditutup tanpa konfirmasi user
-            </p>
+            {canCloseTicket && (
+              <p className="text-xs text-center text-muted-foreground">
+                Ticket akan langsung ditutup tanpa konfirmasi user
+              </p>
+            )}
           </div>
         )}
 
       </CardContent>
+
+      {/* Dialog: Tolak Ticket */}
+      <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-700">
+              <XCircle className="h-5 w-5" />
+              Tolak Ticket
+            </DialogTitle>
+            <DialogDescription>
+              Ticket #{ticket.ticket_number} — {ticket.subject}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Label className="text-sm font-medium">Alasan Penolakan (wajib)</Label>
+            <Textarea
+              placeholder="Jelaskan alasan penolakan..."
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={4}
+              disabled={rejectTicket.isPending}
+              className="text-sm"
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => { setShowRejectDialog(false); setRejectReason("") }}
+              disabled={rejectTicket.isPending}
+            >
+              Batal
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleRejectTicket}
+              disabled={rejectTicket.isPending || !rejectReason.trim()}
+            >
+              {rejectTicket.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-4 w-4" />}
+              Konfirmasi Tolak
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Proses Ticket */}
+      <Dialog open={showProcessDialog} onOpenChange={setShowProcessDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Play className="h-5 w-5 text-primary" />
+              Proses Ticket
+            </DialogTitle>
+            <DialogDescription>
+              Ticket #{ticket.ticket_number} — {ticket.subject}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <p className="text-sm text-blue-800">
+                Status akan berubah: <strong>Draft → In Progress</strong>
+              </p>
+              <p className="text-sm text-blue-700 mt-1">
+                Priority: <strong>{PRIORITY_OPTIONS.find(o => o.value === selectedPriority)?.label ?? "-"}</strong>
+              </p>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Yakin ingin mulai memproses ticket ini?
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowProcessDialog(false)} disabled={openTicket.isPending}>
+              Batal
+            </Button>
+            <Button
+              onClick={() => {
+                openTicket.mutate(undefined)
+                setShowProcessDialog(false)
+              }}
+              disabled={openTicket.isPending}
+            >
+              {openTicket.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+              Ya, Proses Sekarang
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Selesaikan Ticket */}
+      <Dialog open={showCloseDialog} onOpenChange={setShowCloseDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-700">
+              <CheckCircle className="h-5 w-5" />
+              Selesaikan Ticket
+            </DialogTitle>
+            <DialogDescription>
+              Ticket #{ticket.ticket_number} — {ticket.subject}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="p-3 bg-green-50 rounded-lg border border-green-200 space-y-1">
+              <p className="text-sm text-green-800">Status: <strong>In Progress → Closed</strong></p>
+              <p className="text-sm text-green-700">Tim: <strong>{ticket.team?.name ?? "-"}</strong></p>
+              <p className="text-sm text-green-700">
+                Ditangani: <strong>{ticket.assigned_employee?.name ?? ticket.assigned_user?.name ?? "-"}</strong>
+              </p>
+            </div>
+            {confirmMessage && (
+              <div className="p-2 bg-muted/50 rounded text-sm">
+                <p className="text-xs text-muted-foreground mb-1">Catatan:</p>
+                <p>{confirmMessage}</p>
+              </div>
+            )}
+            <p className="text-sm text-muted-foreground">
+              Yakin ingin menyelesaikan ticket ini? Aksi ini tidak dapat dibatalkan.
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowCloseDialog(false)} disabled={closeTicket.isPending}>
+              Batal
+            </Button>
+            <Button
+              className="bg-green-600 hover:bg-green-700"
+              onClick={() => { handleCloseTicket(); setShowCloseDialog(false) }}
+              disabled={closeTicket.isPending}
+            >
+              {closeTicket.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+              Ya, Selesaikan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }

@@ -14,6 +14,7 @@ import { useCallback, useMemo } from 'react'
 import { ticketAPI, messageAPI } from '@/lib/api/endpoints'
 import { queryKeys, CACHE_TIME, invalidation } from '@/lib/query/config'
 import { toast } from '@/hooks/use-toast'
+import { getErrorMessage } from '@/lib/constants/error-messages'
 import type { Ticket } from '@/types'
 
 // Types
@@ -195,7 +196,7 @@ export function useCreateTicket() {
     onError: (error: any) => {
       toast({
         title: '❌ Gagal',
-        description: error.response?.data?.message || 'Gagal membuat ticket',
+        description: getErrorMessage(error),
         variant: 'destructive',
       })
     },
@@ -221,7 +222,7 @@ export function useUpdateTicket() {
     onError: (error: any) => {
       toast({
         title: '❌ Gagal',
-        description: error.response?.data?.message || 'Gagal memperbarui ticket',
+        description: getErrorMessage(error),
         variant: 'destructive',
       })
     },
@@ -246,7 +247,7 @@ export function useUpdateTicketStatus() {
     onError: (error: any) => {
       toast({
         title: '❌ Gagal',
-        description: error.response?.data?.message || 'Gagal memperbarui status',
+        description: getErrorMessage(error),
         variant: 'destructive',
       })
     },
@@ -283,7 +284,7 @@ export function useSendMessage() {
     onError: (error: any) => {
       toast({
         title: '❌ Gagal',
-        description: error.response?.data?.message || 'Gagal mengirim pesan',
+        description: getErrorMessage(error),
         variant: 'destructive',
       })
     },
@@ -307,7 +308,7 @@ export function useDeleteTicket() {
     onError: (error: any) => {
       toast({
         title: '❌ Gagal',
-        description: error.response?.data?.message || 'Gagal menghapus ticket',
+        description: getErrorMessage(error),
         variant: 'destructive',
       })
     },

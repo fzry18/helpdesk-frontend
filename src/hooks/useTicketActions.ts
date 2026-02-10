@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ticketAPI, messageAPI } from '@/lib/api/endpoints'
 import { toast } from '@/hooks/use-toast'
+import { getErrorMessage } from '@/lib/constants/error-messages'
 
 // Hook untuk update tiket
 export const useUpdateTicket = () => {
@@ -20,7 +21,7 @@ export const useUpdateTicket = () => {
         onError: (error: any) => {
             toast({
                 title: '❌ Gagal',
-                description: error.response?.data?.message || 'Gagal memperbarui tiket',
+                description: getErrorMessage(error),
                 variant: 'destructive',
             })
         },
@@ -44,7 +45,7 @@ export const useDeleteTicket = () => {
         onError: (error: any) => {
             toast({
                 title: '❌ Gagal',
-                description: error.response?.data?.message || 'Gagal menghapus tiket',
+                description: getErrorMessage(error),
                 variant: 'destructive',
             })
         },
@@ -69,7 +70,7 @@ export const useAssignUser = () => {
         onError: (error: any) => {
             toast({
                 title: '❌ Gagal',
-                description: error.response?.data?.message || 'Gagal assign user',
+                description: getErrorMessage(error),
                 variant: 'destructive',
             })
         },
@@ -95,7 +96,7 @@ export const useUpdateStage = () => {
         onError: (error: any) => {
             toast({
                 title: '❌ Gagal',
-                description: error.response?.data?.message || 'Gagal memperbarui status',
+                description: getErrorMessage(error),
                 variant: 'destructive',
             })
         },
@@ -120,7 +121,7 @@ export const useUpdatePriority = () => {
         onError: (error: any) => {
             toast({
                 title: '❌ Gagal',
-                description: error.response?.data?.message || 'Gagal memperbarui prioritas',
+                description: getErrorMessage(error),
                 variant: 'destructive',
             })
         },
@@ -156,7 +157,7 @@ export const usePostMessage = () => {
         onError: (error: any) => {
             toast({
                 title: '❌ Gagal',
-                description: error.response?.data?.message || 'Gagal mengirim balasan',
+                description: getErrorMessage(error),
                 variant: 'destructive',
             })
         },

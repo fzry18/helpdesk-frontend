@@ -36,7 +36,8 @@ interface UseTicketWebSocketOptions {
   onNotification?: (data: unknown) => void
 }
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8072/ws/helpdesk'
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || ''
+const WS_ENABLED = !!WS_URL
 
 /**
  * Hook untuk WebSocket dengan integrasi React Query cache
@@ -44,9 +45,12 @@ const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8072/ws/helpdes
  * PENGGUNAAN:
  * 1. Di halaman ticket list: useTicketWebSocket({ enabled: true })
  * 2. Di halaman ticket detail: useTicketWebSocket({ ticketId: 123 })
+ * 
+ * NOTE: WebSocket disabled jika NEXT_PUBLIC_WS_URL tidak dikonfigurasi
  */
 export function useTicketWebSocket(options: UseTicketWebSocketOptions = {}) {
   const { ticketId, enabled = true, onNotification } = options
+  const isEnabled = enabled && WS_ENABLED
   const queryClient = useQueryClient()
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectAttempts = useRef(0)
@@ -170,7 +174,7 @@ export function useTicketWebSocket(options: UseTicketWebSocketOptions = {}) {
 
   // Connect/reconnect logic
   const connect = useCallback(() => {
-    if (!enabled) return
+    if (!isEnabled) return
     if (wsRef.current?.readyState === WebSocket.OPEN) return
     
     try {
@@ -203,11 +207,14 @@ export function useTicketWebSocket(options: UseTicketWebSocketOptions = {}) {
       }
       
       ws.onclose = (event) => {
-        console.log('[WS] Disconnected', event.code, event.reason)
+        // Only log if not a normal closure and not already logged via onerror
+        if (event.code !== 1000) {
+          console.log('[WS] Disconnected:', event.code, event.reason || 'Connection closed')
+        }
         wsRef.current = null
         
-        // Reconnect dengan exponential backoff
-        if (enabled && reconnectAttempts.current < maxReconnectAttempts) {
+        // Reconnect dengan exponential backoff (skip jika connection refused/1006)
+        if (isEnabled && reconnectAttempts.current < maxReconnectAttempts && event.code !== 1006) {
           const delay = Math.min(1000 * 2 ** reconnectAttempts.current, 30000)
           reconnectTimeout.current = setTimeout(() => {
             reconnectAttempts.current++
@@ -217,15 +224,16 @@ export function useTicketWebSocket(options: UseTicketWebSocketOptions = {}) {
         }
       }
       
-      ws.onerror = (error) => {
-        console.error('[WS] Error:', error)
+      ws.onerror = () => {
+        // WebSocket onerror doesn't provide useful info - onclose will handle it
+        // Suppress noisy console errors for connection failures
       }
       
       wsRef.current = ws
     } catch (error) {
       console.error('[WS] Connection failed:', error)
     }
-  }, [enabled, ticketId, handleWSEvent])
+  }, [isEnabled, ticketId, handleWSEvent])
 
   // Disconnect
   const disconnect = useCallback(() => {

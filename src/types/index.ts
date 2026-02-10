@@ -33,7 +33,8 @@ export interface Ticket {
   ticket_number: string
   subject: string
   description: string
-  priority: string | boolean
+  /** Odoo: "0" (Very Low) .. "4" (Very High) */
+  priority: string
   priority_label?: string
   /** helper = Ticketing Helper (manpower/field), system = Ticketing System (Odoo/P2H/Job Portal) */
   ticket_category_type?: "helper" | "system"

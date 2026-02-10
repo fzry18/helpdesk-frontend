@@ -10,6 +10,7 @@ import type {
   Category,
   Team,
   Stage,
+  TicketType,
 } from "@/types"
 
 export interface PaginationMeta {
@@ -265,7 +266,7 @@ export const attachmentAPI = {
   ) =>
     apiClient.post<ApiResponse<Attachment[]>>(
       `/tickets/${ticketId}/attachments`,
-      { attachments: files }
+      { files: files }
     ),
 
   uploadFiles: (ticketId: number, formData: FormData) =>
@@ -330,7 +331,7 @@ export const masterDataAPI = {
   getCategories: () =>
     apiClient.get<ApiResponse<Category[]>>("/categories"),
 
-  getTypes: () => apiClient.get<ApiResponse<any[]>>("/types"),
+  getTypes: () => apiClient.get<ApiResponse<TicketType[]>>("/types"),
 
   getTeams: () => apiClient.get<ApiResponse<Team[]>>("/teams"),
 

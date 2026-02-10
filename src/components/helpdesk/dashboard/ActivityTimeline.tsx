@@ -27,55 +27,6 @@ interface ActivityTimelineProps {
     isLoading?: boolean
 }
 
-// Mock data for demonstration
-const mockActivities: ActivityItem[] = [
-    {
-        id: 1,
-        type: "ticket_created",
-        user: "Fazry",
-        description: "membuat tiket #TKT00018",
-        timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-        ticketId: 18,
-        ticketNumber: "TKT00018",
-    },
-    {
-        id: 2,
-        type: "ticket_assigned",
-        user: "John",
-        description: "menugaskan tiket #TKT00015 ke IT Team",
-        timestamp: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-        ticketId: 15,
-        ticketNumber: "TKT00015",
-    },
-    {
-        id: 3,
-        type: "ticket_closed",
-        user: "Sarah",
-        description: "menutup tiket #TKT00012",
-        timestamp: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
-        ticketId: 12,
-        ticketNumber: "TKT00012",
-    },
-    {
-        id: 4,
-        type: "comment_added",
-        user: "Mitchell",
-        description: "menambahkan komentar di #TKT00018",
-        timestamp: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
-        ticketId: 18,
-        ticketNumber: "TKT00018",
-    },
-    {
-        id: 5,
-        type: "ticket_created",
-        user: "Alice",
-        description: "membuat tiket #TKT00017",
-        timestamp: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-        ticketId: 17,
-        ticketNumber: "TKT00017",
-    },
-]
-
 const getActivityIcon = (type: ActivityItem["type"]) => {
     switch (type) {
         case "ticket_created":
@@ -107,7 +58,7 @@ const getActivityColor = (type: ActivityItem["type"]) => {
 }
 
 export function ActivityTimeline({
-    activities = mockActivities,
+    activities = [],
     isLoading = false,
 }: ActivityTimelineProps) {
     if (isLoading) {
@@ -140,6 +91,11 @@ export function ActivityTimeline({
                 </p>
             </CardHeader>
             <CardContent>
+                {activities.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-8">
+                        Belum ada aktivitas terbaru
+                    </p>
+                ) : (
                 <div className="space-y-4">
                     {activities.map((activity, index) => (
                         <div key={activity.id} className="flex gap-3">
@@ -158,18 +114,14 @@ export function ActivityTimeline({
                                     <div className="space-y-1">
                                         <p className="text-sm">
                                             <span className="font-medium">{activity.user}</span>{" "}
-                                            {activity.ticketId ? (
-                                                <>
-                                                    {activity.description.split("#")[0]}
-                                                    <Link
-                                                        href={`/tickets/${activity.ticketId}`}
-                                                        className="text-primary hover:underline font-medium"
-                                                    >
-                                                        #{activity.ticketNumber}
-                                                    </Link>
-                                                </>
-                                            ) : (
-                                                activity.description
+                                            {activity.description}{" "}
+                                            {activity.ticketId && (
+                                                <Link
+                                                    href={`/tickets/${activity.ticketId}`}
+                                                    className="text-primary hover:underline font-medium"
+                                                >
+                                                    #{activity.ticketNumber}
+                                                </Link>
                                             )}
                                         </p>
                                         <p className="text-xs text-muted-foreground">
@@ -181,6 +133,7 @@ export function ActivityTimeline({
                         </div>
                     ))}
                 </div>
+                )}
             </CardContent>
         </Card>
     )

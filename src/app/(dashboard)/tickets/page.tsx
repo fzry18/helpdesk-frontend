@@ -1,12 +1,14 @@
 "use client"
 
 import { useState, useMemo, useCallback } from "react"
+import { useSearchParams } from "next/navigation"
+import Link from "next/link"
 import { useAuthStore } from "@/store/authStore"
 import { TicketList } from "@/components/helpdesk/tickets/TicketList"
 import { TicketFilters, type TicketFilterValues } from "@/components/helpdesk/tickets/TicketFilters"
-import { CreateTicketDialog } from "@/components/helpdesk/tickets/CreateTicketDialog"
+import { CreateTicketDialog } from "@/components/helpdesk/tickets/create/CreateTicketDialog"
 import { Button } from "@/components/ui/button"
-import { Plus, ChevronLeft, ChevronRight } from "lucide-react"
+import { Plus, ChevronLeft, ChevronRight, ArrowLeft, List } from "lucide-react"
 import { useTicketList } from "@/hooks/use-ticket-queries"
 import { useTicketWebSocket } from "@/hooks/use-ticket-websocket"
 import type { Ticket } from "@/types"
@@ -20,16 +22,39 @@ function getTicketStatusGroup(ticket: Ticket): "Open" | "In Progress" | "Closed"
   return "Open"
 }
 
+function isTicketDraft(ticket: Ticket): boolean {
+  const name = ((ticket.stage?.actual_name ?? ticket.stage?.name) ?? "").toString().toLowerCase()
+  return name.includes("draft") || name.includes("new") || name.includes("baru")
+}
+
 export default function TicketsPage() {
   const isAdmin = useAuthStore((s) => s.isAdmin())
+  const searchParams = useSearchParams()
+  const urlStatus = searchParams.get("status")
+  const createdToday = searchParams.get("created_today")
+  
+  // Detect filtered view mode
+  const isFilteredView = !!(urlStatus || createdToday)
+  
+  // Get filter label for subtitle
+  const getFilterLabel = () => {
+    if (createdToday === "true") return "Tiket Hari Ini"
+    if (urlStatus === "draft") return "Draft"
+    if (urlStatus === "in_progress") return "In Progress"
+    if (urlStatus === "closed") return "Tiket Selesai"
+    return null
+  }
+  const filterLabel = getFilterLabel()
+  
   const [page, setPage] = useState(1)
-  const [filters, setFilters] = useState<TicketFilterValues>({
-    status: "all",
-  })
+  const [filters, setFilters] = useState<TicketFilterValues>(() => ({
+    status: (urlStatus as TicketFilterValues["status"]) || "all",
+  }))
 
   // Map frontend status filter to API status parameter
   const apiStatus = useMemo(() => {
     if (filters.status === "open") return "open"
+    if (filters.status === "draft") return "open" // Backend doesn't have draft, filter client-side
     if (filters.status === "in_progress") return "open" // Backend doesn't have in_progress, filter client-side
     if (filters.status === "closed") return "closed"
     return "all"
@@ -48,7 +73,7 @@ export default function TicketsPage() {
   // WebSocket untuk real-time updates
   useTicketWebSocket({ enabled: true })
 
-  // Filter tickets client-side untuk in_progress (backend tidak support langsung)
+  // Filter tickets client-side untuk in_progress, draft, dan created_today
   const filteredTickets = useMemo(() => {
     const raw = data?.data
     let list: Ticket[] | null = null
@@ -57,15 +82,30 @@ export default function TicketsPage() {
       list = (raw as { data: Ticket[] }).data
     if (!list) return null
     
+    // Filter by created_today
+    if (createdToday === "true") {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      return list.filter((t) => {
+        const createdAt = new Date(t.create_date || "")
+        createdAt.setHours(0, 0, 0, 0)
+        return createdAt.getTime() === today.getTime()
+      })
+    }
+    
+    // Filter draft tickets
+    if (filters.status === "draft") {
+      return list.filter((t) => isTicketDraft(t))
+    }
     // Only filter in_progress on client side since backend may not support it directly
     if (filters.status === "in_progress") {
-      return list.filter((t) => getTicketStatusGroup(t) === "In Progress")
+      return list.filter((t) => getTicketStatusGroup(t) === "In Progress" && !isTicketDraft(t))
     }
     if (filters.status === "open") {
       return list.filter((t) => getTicketStatusGroup(t) === "Open")
     }
     return list
-  }, [data?.data, filters.status])
+  }, [data?.data, filters.status, createdToday])
 
   // Reset page saat filter berubah
   const handleFilterChange = useCallback((newFilters: TicketFilterValues) => {
@@ -81,24 +121,50 @@ export default function TicketsPage() {
 
   return (
     <div className="min-w-0 space-y-4 md:space-y-6">
+      {/* Back to Dashboard link when in filtered view */}
+      {isFilteredView && (
+        <Link 
+          href="/dashboard" 
+          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Kembali ke Dashboard
+        </Link>
+      )}
+
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold md:text-3xl">Tickets</h1>
           <p className="text-sm text-muted-foreground md:text-base">
-            Kelola tiket helpdesk. Buat tiket hanya dari halaman ini.
+            {isFilteredView && filterLabel 
+              ? `Menampilkan tiket: ${filterLabel}`
+              : "Kelola tiket helpdesk. Buat tiket hanya dari halaman ini."
+            }
           </p>
         </div>
-        <CreateTicketDialog
-          trigger={
-            <Button size="lg" className="w-full shrink-0 sm:w-auto">
-              <Plus className="mr-2 h-5 w-5" />
-              Create Ticket
-            </Button>
-          }
-        />
+        <div className="flex items-center gap-2">
+          {isFilteredView && (
+            <Link href="/tickets">
+              <Button variant="outline" size="lg" className="w-full shrink-0 sm:w-auto">
+                <List className="mr-2 h-5 w-5" />
+                Lihat Semua Tiket
+              </Button>
+            </Link>
+          )}
+          {!isFilteredView && (
+            <CreateTicketDialog
+              trigger={
+                <Button size="lg" className="w-full shrink-0 sm:w-auto">
+                  <Plus className="mr-2 h-5 w-5" />
+                  Create Ticket
+                </Button>
+              }
+            />
+          )}
+        </div>
       </div>
 
-      <TicketFilters onFilterChange={handleFilterChange} />
+      <TicketFilters onFilterChange={handleFilterChange} initialStatus={urlStatus as TicketFilterValues["status"]} />
 
       {error && (
         <div className="rounded-lg border border-destructive bg-destructive/10 p-4">

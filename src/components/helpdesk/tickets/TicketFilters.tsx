@@ -12,26 +12,27 @@ import {
 import { X } from "lucide-react"
 
 export interface TicketFilterValues {
-  status?: "open" | "closed" | "in_progress" | "all"
+  status?: "open" | "closed" | "in_progress" | "draft" | "all"
   ticket_category_type?: "system" | "helper"
   priority?: string
 }
 
 interface TicketFiltersProps {
   onFilterChange: (filters: TicketFilterValues) => void
+  initialStatus?: TicketFilterValues["status"]
 }
 
 type OpenFilter = "status" | "priority" | "type" | null
 
-export function TicketFilters({ onFilterChange }: TicketFiltersProps) {
+export function TicketFilters({ onFilterChange, initialStatus }: TicketFiltersProps) {
   const [openFilter, setOpenFilter] = useState<OpenFilter>(null)
   const [priority, setPriority] = useState<string>("all")
-  const [status, setStatus] = useState<string>("all")
+  const [status, setStatus] = useState<string>(initialStatus || "all")
   const [categoryType, setCategoryType] = useState<string>("all")
 
   useEffect(() => {
     const filters: TicketFilterValues = {
-      status: status as "open" | "closed" | "in_progress" | "all",
+      status: status as TicketFilterValues["status"],
     }
     if (categoryType === "helper" || categoryType === "system")
       filters.ticket_category_type = categoryType
@@ -59,7 +60,7 @@ export function TicketFilters({ onFilterChange }: TicketFiltersProps) {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Semua Status</SelectItem>
-            <SelectItem value="open">Terbuka</SelectItem>
+            <SelectItem value="draft">Draft</SelectItem>
             <SelectItem value="in_progress">In Progress</SelectItem>
             <SelectItem value="closed">Selesai</SelectItem>
           </SelectContent>

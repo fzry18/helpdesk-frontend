@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -11,13 +11,21 @@ import { useAuthStore } from "@/store/authStore"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { toast } from "@/hooks/use-toast"
 import { Loader2 } from "lucide-react"
+import { getErrorMessage } from "@/lib/constants/error-messages"
+import { cn } from "@/lib/utils"
 
-// Validasi NIK: harus tepat 4 digit angka
 const loginSchema = z.object({
-  login: z.string()
+  login: z
+    .string()
     .length(4, "NIK harus tepat 4 digit")
     .regex(/^\d{4}$/, "NIK harus berupa 4 digit angka"),
   password: z.string().min(1, "Password harus diisi"),
@@ -25,31 +33,18 @@ const loginSchema = z.object({
 
 type LoginFormData = z.infer<typeof loginSchema>
 
-// Error messages dalam Bahasa Indonesia
-const errorMessages: Record<string, string> = {
-  INVALID_LOGIN_FORMAT: 'Format login tidak valid. Gunakan 4 digit terakhir NIK.',
-  NIK_NOT_FOUND: 'NIK tidak ditemukan. Pastikan Anda memasukkan 4 digit terakhir NIK dengan benar.',
-  NO_HELPDESK_PASSWORD: 'Anda belum memiliki password helpdesk. Hubungi administrator.',
-  INVALID_HELPDESK_PASSWORD: 'Password salah. Silakan coba lagi.',
-  NETWORK_ERROR: 'Terjadi kesalahan jaringan. Periksa koneksi internet Anda.',
-  SERVER_ERROR: 'Terjadi kesalahan pada server. Silakan coba beberapa saat lagi.',
-}
-
-const getErrorMessage = (error: any): string => {
-  const errorCode = error.response?.data?.error
-  if (errorCode && errorMessages[errorCode]) {
-    return errorMessages[errorCode]
-  }
-  if (error.message === 'Network Error') {
-    return errorMessages.NETWORK_ERROR
-  }
-  return error.response?.data?.message || errorMessages.SERVER_ERROR
-}
+/** Error codes that indicate the login (NIK) field is wrong */
+const LOGIN_FIELD_ERROR_CODES = new Set([
+  "INVALID_LOGIN_FORMAT",
+  "NIK_NOT_FOUND",
+])
 
 export default function LoginPage() {
   const router = useRouter()
   const { setAuth } = useAuthStore()
   const [isLoading, setIsLoading] = useState(false)
+  const [loginError, setLoginError] = useState<string | null>(null)
+  const [errorCode, setErrorCode] = useState<string | null>(null)
 
   const {
     register,
@@ -64,13 +59,10 @@ export default function LoginPage() {
     onSuccess: (response) => {
       if (response.success && response.data) {
         const { employee, access_token } = response.data
-
-        // Set auth dengan employee (bukan user!)
         setAuth({
           employee,
           accessToken: access_token,
         })
-
         toast({
           title: "Login berhasil",
           description: `Selamat datang, ${employee.name}!`,
@@ -78,10 +70,15 @@ export default function LoginPage() {
         router.push("/dashboard")
       }
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
+      const err = error as { response?: { data?: { error?: string } } }
+      const code = err?.response?.data?.error ?? null
+      setErrorCode(code ?? null)
+      const errorMsg = getErrorMessage(error)
+      setLoginError(errorMsg)
       toast({
         title: "Login gagal",
-        description: getErrorMessage(error),
+        description: errorMsg,
         variant: "destructive",
       })
     },
@@ -90,22 +87,48 @@ export default function LoginPage() {
     },
   })
 
-  const onSubmit = async (data: LoginFormData) => {
+  // Focus field that caused error; do NOT reset form on error
+  useEffect(() => {
+    if (!loginError) return
+    if (errorCode && LOGIN_FIELD_ERROR_CODES.has(errorCode)) {
+      document.getElementById("login")?.focus()
+    } else {
+      document.getElementById("password")?.focus()
+    }
+  }, [loginError, errorCode])
+
+  const onSubmit = (data: LoginFormData) => {
+    setLoginError(null)
+    setErrorCode(null)
     setIsLoading(true)
     loginMutation.mutate(data)
   }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
-      <Card className="w-full max-w-md">
+      <Card
+        className={cn(
+          "w-full max-w-md",
+          loginError && "animate-shake"
+        )}
+      >
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center">Helpdesk System</CardTitle>
+          <CardTitle className="text-2xl font-bold text-center">
+            Helpdesk System
+          </CardTitle>
           <CardDescription className="text-center">
             Masuk dengan NIK untuk melanjutkan
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            {loginError && (
+              <div className="rounded-md bg-destructive/15 border border-destructive/50 p-3">
+                <p className="text-sm font-medium text-destructive">
+                  {loginError}
+                </p>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="login">NIK (4 digit terakhir)</Label>
               <Input
@@ -120,7 +143,9 @@ export default function LoginPage() {
                 className={errors.login ? "border-destructive" : ""}
               />
               {errors.login && (
-                <p className="text-sm text-destructive">{errors.login.message}</p>
+                <p className="text-sm text-destructive">
+                  {errors.login.message}
+                </p>
               )}
             </div>
 
@@ -135,7 +160,9 @@ export default function LoginPage() {
                 className={errors.password ? "border-destructive" : ""}
               />
               {errors.password && (
-                <p className="text-sm text-destructive">{errors.password.message}</p>
+                <p className="text-sm text-destructive">
+                  {errors.password.message}
+                </p>
               )}
             </div>
 
@@ -153,11 +180,12 @@ export default function LoginPage() {
 
           <div className="mt-4 text-center text-sm text-muted-foreground">
             <p>Gunakan 4 digit terakhir NIK Anda untuk login</p>
-            <p className="mt-1 text-xs">Contoh NIK: 81.0525.6049 → Login: 6049</p>
+            <p className="mt-1 text-xs">
+              Contoh NIK: 81.0525.6049 → Login: 6049
+            </p>
           </div>
         </CardContent>
       </Card>
     </div>
   )
 }
-

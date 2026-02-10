@@ -6,12 +6,13 @@ interface StatCardProps {
   title: string
   value: number | string
   icon: LucideIcon
-  color: "blue" | "orange" | "green" | "purple" | "red"
+  color: "blue" | "orange" | "green" | "purple" | "red" | "amber"
   trend?: {
     value: number
     isPositive: boolean
   }
   subtitle?: string
+  onClick?: () => void
 }
 
 const colorConfig = {
@@ -45,6 +46,12 @@ const colorConfig = {
     gradient: "from-red-50 to-red-100/50",
     trend: "text-red-600",
   },
+  amber: {
+    text: "text-amber-600",
+    bg: "bg-amber-100",
+    gradient: "from-amber-50 to-amber-100/50",
+    trend: "text-amber-600",
+  },
 }
 
 export function StatCard({
@@ -54,6 +61,7 @@ export function StatCard({
   color,
   trend,
   subtitle,
+  onClick,
 }: StatCardProps) {
   const colors = colorConfig[color]
 
@@ -61,8 +69,10 @@ export function StatCard({
     <Card
       className={cn(
         "relative overflow-hidden transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5",
-        `bg-gradient-to-br ${colors.gradient}`
+        `bg-gradient-to-br ${colors.gradient}`,
+        onClick && "cursor-pointer"
       )}
+      onClick={onClick}
     >
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2 px-3 sm:px-4 pt-3 sm:pt-4">
         <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
