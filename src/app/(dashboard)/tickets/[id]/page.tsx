@@ -182,6 +182,7 @@ export default function TicketDetailPage({
 
   const isAdminUser = isAdmin()
   const helpdeskRole = getHelpdeskRole()
+  const isTicketOwner = Boolean(employee?.id && ticket.assigned_employee?.id && employee.id === ticket.assigned_employee.id)
   const isClosed =
     Boolean(ticket.stage?.name?.toLowerCase().includes("closed")) ||
     Boolean(ticket.resolution_confirmed)
@@ -193,9 +194,8 @@ export default function TicketDetailPage({
     if (helpdeskRole === "dept_admin") {
       const ticketDeptId = ticket.department_id ?? null
       const myDeptId = employee?.department_id ?? null
-      if (!ticketDeptId) return true
-      if (myDeptId && ticketDeptId === myDeptId) return true
-      return false
+      if (!ticketDeptId || !myDeptId) return false // strict: tanpa dept = tidak boleh
+      return ticketDeptId === myDeptId
     }
     return false
   }
@@ -230,8 +230,8 @@ export default function TicketDetailPage({
         </div>
 
         <div className="space-y-4 order-1 lg:order-2">
-          {isAdminUser && (
-            <TicketAdminActions ticket={ticket} canModify={canModify} />
+          {(isAdminUser || isTicketOwner) && (
+            <TicketAdminActions ticket={ticket} canModify={canModify} isTicketOwner={isTicketOwner} />
           )}
           {!isAdminUser && <TicketMetadataSidebar ticket={ticket} />}
           <MessageThread

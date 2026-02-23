@@ -15,6 +15,7 @@ import { ticketAPI, messageAPI } from '@/lib/api/endpoints'
 import { queryKeys, CACHE_TIME, invalidation } from '@/lib/query/config'
 import { toast } from '@/hooks/use-toast'
 import { getErrorMessage } from '@/lib/constants/error-messages'
+import { useAuthStore } from '@/store/authStore'
 import type { Ticket } from '@/types'
 
 // Types
@@ -44,8 +45,8 @@ const DEFAULT_PAGE_SIZE = 20
  * Hook untuk ticket list dengan pagination
  */
 export function useTicketList(params: TicketListParams = {}) {
-  const { 
-    page = 1, 
+  const {
+    page = 1,
     limit = DEFAULT_PAGE_SIZE,
     status = 'all',
     priority,
@@ -55,7 +56,10 @@ export function useTicketList(params: TicketListParams = {}) {
     my_tickets = false
   } = params
 
-  // Normalized filter untuk cache key konsisten
+  const employee = useAuthStore((s) => s.employee)
+  const helpdeskRole = useAuthStore((s) => s.getHelpdeskRole())
+
+  // Normalized filter untuk cache key konsisten (termasuk role agar refetch saat role berubah)
   const filters = useMemo(() => ({
     page,
     limit,
@@ -65,7 +69,8 @@ export function useTicketList(params: TicketListParams = {}) {
     search: search?.trim() || undefined,
     team_id: team_id || undefined,
     my_tickets,
-  }), [page, limit, status, priority, ticket_category_type, search, team_id, my_tickets])
+    helpdeskRole,
+  }), [page, limit, status, priority, ticket_category_type, search, team_id, my_tickets, helpdeskRole])
 
   return useQuery({
     queryKey: queryKeys.tickets.list(filters),
@@ -79,6 +84,7 @@ export function useTicketList(params: TicketListParams = {}) {
       team_id,
       my_tickets,
     }),
+    enabled: !!employee,
     staleTime: CACHE_TIME.TICKET_LIST.staleTime,
     gcTime: CACHE_TIME.TICKET_LIST.gcTime,
     placeholderData: (previousData) => previousData, // Keep showing old data while fetching
@@ -90,7 +96,7 @@ export function useTicketList(params: TicketListParams = {}) {
  * Gunakan ini untuk mobile atau continuous scrolling
  */
 export function useInfiniteTicketList(params: Omit<TicketListParams, 'page'> = {}) {
-  const { 
+  const {
     limit = DEFAULT_PAGE_SIZE,
     status = 'all',
     priority,
@@ -184,7 +190,7 @@ export function useCreateTicket() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (data: Parameters<typeof ticketAPI.create>[0]) => 
+    mutationFn: (data: Parameters<typeof ticketAPI.create>[0]) =>
       ticketAPI.create(data),
     onSuccess: () => {
       invalidation.onTicketCreated(queryClient)
@@ -210,7 +216,7 @@ export function useUpdateTicket() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<Ticket> }) => 
+    mutationFn: ({ id, data }: { id: number; data: Partial<Ticket> }) =>
       ticketAPI.update(id, data),
     onSuccess: (_, variables) => {
       invalidation.onTicketUpdated(queryClient, variables.id)
@@ -236,7 +242,7 @@ export function useUpdateTicketStatus() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ id, stageId }: { id: number; stageId: number }) => 
+    mutationFn: ({ id, stageId }: { id: number; stageId: number }) =>
       ticketAPI.updateStage(id, stageId),
     onSuccess: (_, variables) => {
       invalidation.onStatusChanged(queryClient, variables.id)
@@ -261,10 +267,10 @@ export function useSendMessage() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ ticketId, body, internal = false }: { 
-      ticketId: number; 
-      body: string; 
-      internal?: boolean 
+    mutationFn: ({ ticketId, body, internal = false }: {
+      ticketId: number;
+      body: string;
+      internal?: boolean
     }) => messageAPI.postMessage(ticketId, { body, internal }),
     onSuccess: (response, variables) => {
       // Inject message ke cache langsung, tidak perlu refetch
@@ -321,20 +327,20 @@ export function useDeleteTicket() {
  */
 export function useInitialTicketData(ticketId: number): Ticket | undefined {
   const queryClient = useQueryClient()
-  
+
   return useMemo(() => {
     // Cari di semua list cache
     const listQueries = queryClient.getQueriesData<{ data: Ticket[] }>({
       queryKey: queryKeys.tickets.lists()
     })
-    
+
     for (const [, data] of listQueries) {
       if (data?.data) {
         const ticket = data.data.find(t => t.id === ticketId)
         if (ticket) return ticket
       }
     }
-    
+
     return undefined
   }, [queryClient, ticketId])
 }

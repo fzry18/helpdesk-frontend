@@ -17,13 +17,13 @@ export function useWebSocket({ url, reconnectAttempts = 5, reconnectInterval = 3
     const connectWebSocket = () => {
       try {
         const ws = new WebSocket(url)
-        
+
         ws.onopen = () => {
           setIsConnected(true)
           reconnectCount.current = 0
           console.log('WebSocket connected')
         }
-        
+
         ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data)
@@ -32,11 +32,11 @@ export function useWebSocket({ url, reconnectAttempts = 5, reconnectInterval = 3
             console.error('Failed to parse WebSocket message:', error)
           }
         }
-        
+
         ws.onclose = () => {
           setIsConnected(false)
           setSocket(null)
-          
+
           // Attempt to reconnect
           if (reconnectCount.current < reconnectAttempts) {
             setTimeout(() => {
@@ -46,11 +46,11 @@ export function useWebSocket({ url, reconnectAttempts = 5, reconnectInterval = 3
             }, reconnectInterval)
           }
         }
-        
+
         ws.onerror = (error) => {
           console.error('WebSocket error:', error)
         }
-        
+
         setSocket(ws)
       } catch (error) {
         console.error('Failed to create WebSocket connection:', error)

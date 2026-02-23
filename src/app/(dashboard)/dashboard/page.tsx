@@ -28,10 +28,11 @@ const LazyUrgentTicketsSection = dynamic(
   { loading: () => null, ssr: false }
 )
 
-const LazyActivityTimeline = dynamic(
-  () => import('@/components/helpdesk/dashboard/ActivityTimeline').then(mod => ({ default: mod.ActivityTimeline })),
+const LazyDepartmentKPIChart = dynamic(
+  () => import('@/components/helpdesk/dashboard/DepartmentKPIChart').then(mod => ({ default: mod.DepartmentKPIChart })),
   { loading: () => null, ssr: false }
 )
+
 
 const RECENT_LIMIT = 50
 
@@ -49,81 +50,33 @@ function unwrapData<T>(raw: unknown): T | null {
   return raw as T
 }
 
-function getTicketStatusGroup(t: Ticket): "Open" | "In Progress" | "Closed" {
+function getTicketStatusGroup(t: Ticket): "Open" | "In Progress" | "Closed" | "Rejected" {
+  // Cek rejected PERTAMA, sebelum cek stage
+  if (t.is_rejected) return "Rejected"
   const name = ((t.stage?.actual_name ?? t.stage?.name) ?? "").toString().toLowerCase()
   if (name.includes("closed") || name.includes("selesai") || t.resolution_confirmed === true) return "Closed"
   if (name.includes("progress") || name.includes("in progress") || name.includes("awaiting") || name.includes("confirmation") || name.includes("menunggu")) return "In Progress"
   return "Open"
 }
 
-function computeUserStatsFromTickets(tickets: Ticket[]): { total: number; open: number; inProgress: number; closed: number } {
-  let open = 0, inProgress = 0, closed = 0
+function computeUserStatsFromTickets(tickets: Ticket[]): { total: number; open: number; inProgress: number; closed: number; rejected: number } {
+  let open = 0, inProgress = 0, closed = 0, rejected = 0
   for (const t of tickets) {
     const g = getTicketStatusGroup(t)
     if (g === "Open") open++
     else if (g === "In Progress") inProgress++
+    else if (g === "Rejected") rejected++
     else closed++
   }
-  return { total: tickets.length, open, inProgress, closed }
+  return { total: tickets.length, open, inProgress, closed, rejected }
 }
 
-// Activity item type for timeline
-interface ActivityItem {
-  id: number
-  type: "ticket_created" | "ticket_assigned" | "ticket_closed" | "comment_added"
-  user: string
-  description: string
-  timestamp: string
-  ticketId?: number
-  ticketNumber?: string
-}
-
-// Transform tickets to activity items
-function transformTicketsToActivities(tickets: Ticket[]): ActivityItem[] {
-  const activities: ActivityItem[] = []
-  let idCounter = 1
-
-  for (const ticket of tickets) {
-    const userName = ticket.created_by?.name || ticket.customer_name || ticket.customer?.name || "Unknown"
-    const ticketNumber = ticket.ticket_number || `#${ticket.id}`
-    
-    // Add ticket_created activity
-    activities.push({
-      id: idCounter++,
-      type: "ticket_created",
-      user: userName,
-      description: "membuat tiket",
-      timestamp: ticket.create_date || new Date().toISOString(),
-      ticketId: ticket.id,
-      ticketNumber: ticketNumber,
-    })
-    
-    // Add ticket_closed activity if ticket is closed
-    const stageName = ((ticket.stage?.actual_name ?? ticket.stage?.name) ?? "").toString().toLowerCase()
-    if (stageName.includes("closed") || stageName.includes("selesai") || ticket.resolution_confirmed === true) {
-      const closedBy = ticket.assigned_employee?.name || ticket.created_by?.name || userName
-      activities.push({
-        id: idCounter++,
-        type: "ticket_closed",
-        user: closedBy,
-        description: "menutup tiket",
-        timestamp: ticket.write_date || ticket.create_date || new Date().toISOString(),
-        ticketId: ticket.id,
-        ticketNumber: ticketNumber,
-      })
-    }
-  }
-  
-  // Sort by timestamp descending and take top 10
-  return activities
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-    .slice(0, 10)
-}
 
 export default function DashboardPage() {
   // Use selectors for optimized re-renders
   const isAdmin = useAuthStore(selectIsAdmin)
   const helpdeskRole = useAuthStore(selectHelpdeskRole)
+  const employee = useAuthStore((s) => s.employee)
   const isMobile = useIsMobile(768)
   const router = useRouter()
 
@@ -169,20 +122,18 @@ export default function DashboardPage() {
   )
 
   const urgentTickets = useMemo(
-    () => recentTicketsList.filter((t) => t.priority === "3" || t.priority === "4"),
-    [recentTicketsList]
-  )
-
-  // Transform tickets to activity items for timeline
-  const activityItems = useMemo(
-    () => transformTicketsToActivities(recentTicketsList),
+    () => recentTicketsList.filter((t) =>
+      (t.priority === "3" || t.priority === "4") &&
+      !t.is_rejected &&
+      getTicketStatusGroup(t) === "In Progress"
+    ),
     [recentTicketsList]
   )
 
   const userStats = useMemo(() => {
     if (isAdmin) return null
     const raw = myTicketsData?.data
-    const payload = unwrapData<{ stats?: { total: number; open: number; in_progress?: number; closed: number }; tickets?: Ticket[] }>(raw)
+    const payload = unwrapData<{ stats?: { total: number; open: number; in_progress?: number; closed: number; rejected?: number }; tickets?: Ticket[] }>(raw)
     
     // Use backend stats if available
     if (payload?.stats) {
@@ -191,6 +142,7 @@ export default function DashboardPage() {
         open: payload.stats.open,
         inProgress: payload.stats.in_progress ?? 0,
         closed: payload.stats.closed,
+        rejected: payload.stats.rejected ?? 0,
       }
     }
     
@@ -213,8 +165,10 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-2xl font-bold md:text-3xl">Dashboard</h1>
           <p className="text-sm text-muted-foreground md:text-base">
-            {isAdmin
+            {helpdeskRole === "super_admin"
               ? "Ringkasan aktivitas helpdesk dan statistik ticket"
+              : helpdeskRole === "dept_admin"
+              ? `Statistik ticket departemen ${employee?.department || "Anda"}`
               : "Tiket Anda dan status terbaru"}
           </p>
         </div>
@@ -285,7 +239,9 @@ export default function DashboardPage() {
         <DeferredRender delay={isMobile ? 500 : 300} mobileDelay={1500} fallback={
           <div className="grid gap-4 md:gap-6 grid-cols-1 lg:grid-cols-2">
             <Skeleton className="h-[400px] rounded-lg" />
-            <Skeleton className="h-[500px] rounded-lg" />
+            {helpdeskRole === "super_admin" && (
+              <Skeleton className="h-[400px] rounded-lg" />
+            )}
           </div>
         }>
           <div className="grid gap-4 md:gap-6 grid-cols-1 lg:grid-cols-2">
@@ -295,9 +251,14 @@ export default function DashboardPage() {
                 isLoading={recentLoading}
               />
             </LazyChartWrapper>
-            <LazyChartWrapper height="500px" delay={150} mobileDelay={1000}>
-              <LazyActivityTimeline activities={activityItems} isLoading={recentLoading} />
-            </LazyChartWrapper>
+            {helpdeskRole === "super_admin" && (
+              <LazyChartWrapper height="400px" delay={150} mobileDelay={1000}>
+                <LazyDepartmentKPIChart
+                  tickets={recentTicketsList}
+                  isLoading={recentLoading}
+                />
+              </LazyChartWrapper>
+            )}
           </div>
         </DeferredRender>
       )}

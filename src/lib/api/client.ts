@@ -56,8 +56,11 @@ class APIClient {
         }
 
         // 2. Handle 401 Unauthorized - redirect ke login
+        // Skip redirect if already on login page (avoids form reset on bad credentials)
         if (response.status === 401) {
-          this.handleAuthError()
+          if (typeof window === "undefined" || window.location.pathname !== "/login") {
+            this.handleAuthError()
+          }
         }
 
         // Untuk semua error, jangan redirect
@@ -142,12 +145,12 @@ export function getBackendBaseUrl(): string {
   if (backendUrl) {
     return backendUrl.replace(/\/$/, '') // Remove trailing slash
   }
-  
+
   // Fallback: try to extract from NEXT_PUBLIC_API_BASE_URL
   // e.g., http://localhost:8072/api/helpdesk -> http://localhost:8072
   // or /api/helpdesk -> use window.location.origin (but this won't work for Odoo)
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || API_BASE_URL
-  
+
   if (apiBaseUrl.startsWith('http://') || apiBaseUrl.startsWith('https://')) {
     try {
       const url = new URL(apiBaseUrl)
@@ -156,19 +159,19 @@ export function getBackendBaseUrl(): string {
       // Invalid URL, continue to next fallback
     }
   }
-  
+
   // Last resort: for development, default to localhost:8072
   // This assumes Odoo is running on port 8072
   if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
     return 'http://localhost:8072'
   }
-  
+
   // In production or if nothing else works, use current origin
   // Note: This may not work if frontend and backend are on different domains
   if (typeof window !== 'undefined') {
     return window.location.origin
   }
-  
+
   return ''
 }
 
@@ -179,15 +182,15 @@ export function getBackendBaseUrl(): string {
  */
 export function getAttachmentUrl(relativeUrl: string | undefined | null): string {
   if (!relativeUrl) return ''
-  
+
   // If already absolute URL, return as is
   if (relativeUrl.startsWith('http://') || relativeUrl.startsWith('https://')) {
     return relativeUrl
   }
-  
+
   // Ensure the relative URL starts with /
   const normalizedPath = relativeUrl.startsWith('/') ? relativeUrl : `/${relativeUrl}`
-  
+
   // Prepend backend base URL
   const baseUrl = getBackendBaseUrl()
   return `${baseUrl}${normalizedPath}`

@@ -32,7 +32,7 @@ const menuItems = [
 
 export function Sidebar() {
   const pathname = usePathname()
-  const { employee, logout, getDepartment, getJobTitle } = useAuthStore()
+  const { employee, logout, getDepartment, getJobTitle, hasOdooAccount } = useAuthStore()
   const router = useRouter()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
@@ -104,6 +104,16 @@ export function Sidebar() {
             <p className="truncate text-xs text-muted-foreground">
               {displayDepartment || displayJobTitle || `NIK: ...${employee?.helpdesk_username || ''}`}
             </p>
+            <span
+              className={cn(
+                "mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-medium",
+                hasOdooAccount()
+                  ? "bg-primary/15 text-primary"
+                  : "bg-muted text-muted-foreground"
+              )}
+            >
+              {hasOdooAccount() ? "Odoo + Helpdesk" : "Helpdesk Only"}
+            </span>
           </div>
         </div>
         <Button

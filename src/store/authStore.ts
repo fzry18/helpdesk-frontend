@@ -34,6 +34,10 @@ interface AuthActions {
   isAdmin: () => boolean
   // Helper untuk cek apakah super admin
   isSuperAdmin: () => boolean
+  // Helper untuk user type dari login response
+  getUserType: () => 'odoo_user' | 'nik_only'
+  // Helper untuk cek punya akun Odoo
+  hasOdooAccount: () => boolean
 }
 
 type AuthStore = AuthState & AuthActions
@@ -127,6 +131,14 @@ export const useAuthStore = create<AuthStore>()(
       isSuperAdmin: () => {
         const state = get()
         return state.employee?.helpdesk_role === 'super_admin'
+      },
+      getUserType: () => {
+        const state = get()
+        return state.employee?.user_type || 'nik_only'
+      },
+      hasOdooAccount: () => {
+        const state = get()
+        return state.employee?.has_odoo_account ?? false
       },
     })),
     {

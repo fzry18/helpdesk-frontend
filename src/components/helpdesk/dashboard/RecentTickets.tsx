@@ -6,17 +6,20 @@ import { TicketCard } from "@/components/helpdesk/tickets/TicketCard"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { Ticket } from "@/types"
 
-const STATUS_ORDER: ("Open" | "In Progress" | "Closed")[] = ["Open", "In Progress", "Closed"]
-const STATUS_LABELS: Record<"Open" | "In Progress" | "Closed", string> = {
+const STATUS_ORDER: ("Open" | "In Progress" | "Closed" | "Rejected")[] = ["Open", "In Progress", "Closed", "Rejected"]
+const STATUS_LABELS: Record<"Open" | "In Progress" | "Closed" | "Rejected", string> = {
   Open: "Terbuka",
   "In Progress": "In Progress",
   Closed: "Selesai",
+  Rejected: "Ditolak",
 }
 const COLUMN_SCROLL_HEIGHT = 320
 const COLUMN_MIN_WIDTH = 280
 
-/** Group by stage/status: Open, In Progress, Closed (pakai stage.name / actual_name) */
-function getTicketStatusGroup(ticket: Ticket): "Open" | "In Progress" | "Closed" {
+/** Group by stage/status: Open, In Progress, Closed, Rejected */
+function getTicketStatusGroup(ticket: Ticket): "Open" | "In Progress" | "Closed" | "Rejected" {
+  // Rejected harus dicek dulu supaya tidak ikut Closed
+  if (ticket.is_rejected) return "Rejected"
   const name = ((ticket.stage?.actual_name ?? ticket.stage?.name) ?? "").toString().toLowerCase()
   if (
     name.includes("closed") ||
@@ -43,10 +46,11 @@ interface RecentTicketsProps {
 const RecentTicketsComponent = ({ tickets, isLoading }: RecentTicketsProps) => {
   // Memoize expensive calculations
   const groupsByStatus = useMemo(() => {
-    const groups: Record<"Open" | "In Progress" | "Closed", Ticket[]> = {
+    const groups: Record<"Open" | "In Progress" | "Closed" | "Rejected", Ticket[]> = {
       Open: [],
       "In Progress": [],
       Closed: [],
+      Rejected: [],
     }
     if (tickets && tickets.length > 0) {
       const sorted = [...tickets].sort((a, b) => {
@@ -81,7 +85,7 @@ const RecentTicketsComponent = ({ tickets, isLoading }: RecentTicketsProps) => {
   }
 
   // Get color config for column header based on status
-  const getColumnHeaderStyle = (status: "Open" | "In Progress" | "Closed") => {
+  const getColumnHeaderStyle = (status: "Open" | "In Progress" | "Closed" | "Rejected") => {
     switch (status) {
       case "Open":
         return "bg-blue-500 text-white"
@@ -89,6 +93,8 @@ const RecentTicketsComponent = ({ tickets, isLoading }: RecentTicketsProps) => {
         return "bg-amber-500 text-white"
       case "Closed":
         return "bg-green-600 text-white"
+      case "Rejected":
+        return "bg-red-600 text-white"
       default:
         return "bg-gray-500 text-white"
     }

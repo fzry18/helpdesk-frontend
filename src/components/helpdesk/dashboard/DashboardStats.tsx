@@ -1,7 +1,7 @@
 "use client"
 
 import { StatCard } from "@/components/ui/stat-card"
-import { Ticket, CheckCircle2, FileEdit, Clock, Calendar } from "lucide-react"
+import { Ticket, CheckCircle2, FileEdit, Clock, Calendar, XCircle } from "lucide-react"
 
 interface DashboardStatsProps {
   stats: {
@@ -9,6 +9,7 @@ interface DashboardStatsProps {
       total: number
       open: number
       closed: number
+      rejected: number
       unassigned: number
     }
     period: {
@@ -59,8 +60,8 @@ export function DashboardStats({ stats, isLoading, onStatClick }: DashboardStats
 
   if (isLoading) {
     return (
-      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
-        {[1, 2, 3, 4].map((i) => (
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-6">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
           <div key={i} className="h-24 sm:h-32 animate-pulse rounded-lg bg-muted" />
         ))}
       </div>
@@ -68,7 +69,7 @@ export function DashboardStats({ stats, isLoading, onStatClick }: DashboardStats
   }
 
   return (
-    <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-5">
+    <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-6">
       <StatCard
         title="Total Tiket"
         value={stats?.summary?.total || 0}
@@ -94,12 +95,19 @@ export function DashboardStats({ stats, isLoading, onStatClick }: DashboardStats
         onClick={() => onStatClick?.("in_progress")}
       />
       <StatCard
-        title="Tiket Selesai"
+        title="Selesai"
         value={stats?.summary?.closed || 0}
         icon={CheckCircle2}
         color="green"
         trend={mockTrends.closed}
         onClick={() => onStatClick?.("closed")}
+      />
+      <StatCard
+        title="Ditolak"
+        value={stats?.summary?.rejected || 0}
+        icon={XCircle}
+        color="red"
+        onClick={() => onStatClick?.("rejected")}
       />
       <StatCard
         title="Hari Ini"

@@ -183,6 +183,7 @@ export function CreateTicketDialog({ trigger, onSuccess }: CreateTicketDialogPro
             <HelperCategoryForm
               value={helperCategory}
               onChange={(v) => setValue("helper_category", v)}
+              error={errors.helper_category?.message}
             />
           )}
 
@@ -193,6 +194,7 @@ export function CreateTicketDialog({ trigger, onSuccess }: CreateTicketDialogPro
               onSystemCategoryChange={(v) => setValue("system_category", v)}
               onTicketTypeChange={(v) => setValue("ticket_type", v)}
               register={register}
+              systemCategoryError={errors.system_category?.message}
             />
           )}
 

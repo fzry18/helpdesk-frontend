@@ -8,21 +8,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { AlertCircle } from "lucide-react"
 import { HELPER_CATEGORIES } from "./constants"
 
 interface HelperCategoryFormProps {
   value: string | undefined
   onChange: (value: string) => void
+  error?: string
 }
 
-export function HelperCategoryForm({ value, onChange }: HelperCategoryFormProps) {
+export function HelperCategoryForm({ value, onChange, error }: HelperCategoryFormProps) {
   return (
     <div className="space-y-2">
       <Label>
         Kategori Masalah <span className="text-destructive">*</span>
       </Label>
       <Select value={value ?? ""} onValueChange={onChange}>
-        <SelectTrigger>
+        <SelectTrigger className={error ? "border-destructive" : ""}>
           <SelectValue placeholder="Pilih kategori masalah" />
         </SelectTrigger>
         <SelectContent>
@@ -33,9 +35,17 @@ export function HelperCategoryForm({ value, onChange }: HelperCategoryFormProps)
           ))}
         </SelectContent>
       </Select>
-      <p className="text-xs text-muted-foreground">
-        Pilih kategori yang paling sesuai dengan masalah Anda
-      </p>
+      {error && (
+        <p className="text-sm text-destructive flex items-center gap-1">
+          <AlertCircle className="h-3 w-3" />
+          {error}
+        </p>
+      )}
+      {!error && (
+        <p className="text-xs text-muted-foreground">
+          Pilih kategori yang paling sesuai dengan masalah Anda
+        </p>
+      )}
     </div>
   )
 }

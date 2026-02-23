@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { AlertCircle } from "lucide-react"
 import { UseFormRegister } from "react-hook-form"
 import { SYSTEM_CATEGORIES, TICKET_TYPES, type CreateTicketForm } from "./constants"
 
@@ -18,6 +19,7 @@ interface SystemCategoryFormProps {
   onSystemCategoryChange: (value: "odoo" | "p2h" | "job_portal" | "other") => void
   onTicketTypeChange: (value: string) => void
   register: UseFormRegister<CreateTicketForm>
+  systemCategoryError?: string
 }
 
 export function SystemCategoryForm({
@@ -26,6 +28,7 @@ export function SystemCategoryForm({
   onSystemCategoryChange,
   onTicketTypeChange,
   register,
+  systemCategoryError,
 }: SystemCategoryFormProps) {
   return (
     <>
@@ -40,7 +43,7 @@ export function SystemCategoryForm({
               onSystemCategoryChange(v as "odoo" | "p2h" | "job_portal" | "other")
             }
           >
-            <SelectTrigger>
+            <SelectTrigger className={systemCategoryError ? "border-destructive" : ""}>
               <SelectValue placeholder="Pilih sistem" />
             </SelectTrigger>
             <SelectContent>
@@ -51,6 +54,12 @@ export function SystemCategoryForm({
               ))}
             </SelectContent>
           </Select>
+          {systemCategoryError && (
+            <p className="text-sm text-destructive flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" />
+              {systemCategoryError}
+            </p>
+          )}
         </div>
         <div className="space-y-2">
           <Label>Tipe Masalah</Label>

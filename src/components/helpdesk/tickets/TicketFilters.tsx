@@ -12,7 +12,7 @@ import {
 import { X } from "lucide-react"
 
 export interface TicketFilterValues {
-  status?: "open" | "closed" | "in_progress" | "draft" | "all"
+  status?: "open" | "closed" | "in_progress" | "draft" | "rejected" | "all"
   ticket_category_type?: "system" | "helper"
   priority?: string
 }
@@ -63,6 +63,7 @@ export function TicketFilters({ onFilterChange, initialStatus }: TicketFiltersPr
             <SelectItem value="draft">Draft</SelectItem>
             <SelectItem value="in_progress">In Progress</SelectItem>
             <SelectItem value="closed">Selesai</SelectItem>
+            <SelectItem value="rejected">Ditolak</SelectItem>
           </SelectContent>
         </Select>
 

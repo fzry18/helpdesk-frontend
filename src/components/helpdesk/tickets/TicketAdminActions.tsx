@@ -24,8 +24,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/hooks/use-toast"
 import { getErrorMessage } from "@/lib/constants/error-messages"
-import { 
-  UserPlus, CheckCircle, Loader2, Play, Users, 
+import {
+  UserPlus, CheckCircle, Loader2, Play, Users,
   ClipboardList, Send, User, Settings, XCircle, AlertTriangle
 } from "lucide-react"
 import type { Ticket } from "@/types"
@@ -41,10 +41,12 @@ const PRIORITY_OPTIONS = [
 
 interface TicketAdminActionsProps {
   ticket: Ticket
-  canModify: boolean // dept_admin (same dept) or super_admin
+  canModify: boolean // dept_admin (same dept) or super_admin — for Assign, Reject, Change Stage
+  isTicketOwner?: boolean // assigned employee (PIC) — can Close even if !canModify
 }
 
-export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProps) {
+export function TicketAdminActions({ ticket, canModify, isTicketOwner = false }: TicketAdminActionsProps) {
+  const canClose = canModify || isTicketOwner
   const queryClient = useQueryClient()
   // Team ID dari API bisa team_id atau team.id (agar tetap ada setelah keluar dari detail)
   const teamId = ticket.team_id ?? ticket.team?.id
@@ -58,9 +60,13 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
   const [showRejectDialog, setShowRejectDialog] = useState(false)
   const [showProcessDialog, setShowProcessDialog] = useState(false)
   const [showCloseDialog, setShowCloseDialog] = useState(false)
+  const [showAssignTeamDialog, setShowAssignTeamDialog] = useState(false)
   const [selectedPriority, setSelectedPriority] = useState<string>(
     ticket.priority ?? ""
   )
+  // State untuk team/member di dialog proses (Draft stage)
+  const [processDialogTeam, setProcessDialogTeam] = useState<string>("")
+  const [processDialogMember, setProcessDialogMember] = useState<string>("")
 
   // Sinkronkan dropdown team dan member dengan data ticket terbaru (dari server)
   useEffect(() => {
@@ -105,27 +111,45 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
   const teamMembers = membersFromDetail.length > 0 ? membersFromDetail : membersFromFallback
   const teamMembersLoading = teamDetailLoading
 
+  // Fetch team members untuk dialog proses (ketika team dipilih di dialog)
+  const processDialogTeamId = processDialogTeam ? parseInt(processDialogTeam) : null
+  const { data: processTeamDetailData, isLoading: processTeamDetailLoading } = useQuery({
+    queryKey: ["team", processDialogTeamId],
+    queryFn: () => masterDataAPI.getTeam(processDialogTeamId!),
+    enabled: !!processDialogTeamId,
+  })
+  const processMembersFromDetailRaw = (processTeamDetailData?.data as { members?: unknown[] } | undefined)?.members ?? []
+  const { data: processTeamMembersOnlyData } = useQuery({
+    queryKey: ["team", processDialogTeamId, "members"],
+    queryFn: () => masterDataAPI.getTeamMembers(processDialogTeamId!),
+    enabled: !!processDialogTeamId && !!processTeamDetailData?.data && Array.isArray(processMembersFromDetailRaw) && processMembersFromDetailRaw.length === 0,
+  })
+  const processMembersFromDetail = processMembersFromDetailRaw as Array<{ id: number; name?: string; user_id?: number | null; nik?: string }>
+  const processMembersFromFallback = (processTeamMembersOnlyData?.data as unknown as Array<{ id: number; name?: string; user_id?: number | null; nik?: string }>) ?? []
+  const processDialogTeamMembers = processMembersFromDetail.length > 0 ? processMembersFromDetail : processMembersFromFallback
+  const processDialogTeamMembersLoading = processTeamDetailLoading
+
   // Check ticket status - also handle null/missing stage as Draft (new tickets)
   const stageName = ticket.stage?.name?.toLowerCase() || ""
   const stageActualName = ticket.stage?.actual_name?.toLowerCase() || ""
-  
+
   // isDraft: stage is Draft, Sent, or null/missing (new tickets from system)
-  const isDraft = 
-    !ticket.stage || 
+  const isDraft =
+    !ticket.stage ||
     !ticket.stage.name ||
-    stageName === "draft" || 
-    stageName === "sent" || 
+    stageName === "draft" ||
+    stageName === "sent" ||
     stageActualName === "draft"
-  
-  const isInProgress = 
-    stageName.includes("progress") || 
+
+  const isInProgress =
+    stageName.includes("progress") ||
     stageActualName.includes("progress")
-  
-  const isClosed = 
-    stageName.includes("closed") || 
-    stageActualName.includes("closed") || 
+
+  const isClosed =
+    stageName.includes("closed") ||
+    stageActualName.includes("closed") ||
     ticket.resolution_confirmed
-  
+
   const isAwaitingConfirmation = ticket.waiting_user_confirmation && !ticket.resolution_confirmed
 
   // ====== WORKFLOW GUARDS ======
@@ -143,6 +167,8 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
     if (!isDraft || ticket.is_rejected) {
       setShowRejectDialog(false)
       setShowProcessDialog(false)
+      setProcessDialogTeam("")
+      setProcessDialogMember("")
     }
     if (isClosed || ticket.is_rejected) {
       setShowCloseDialog(false)
@@ -294,9 +320,9 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["ticket", ticket.id] })
       queryClient.invalidateQueries({ queryKey: ["tickets"] })
-      toast({ 
-        title: "Berhasil", 
-        description: `Priority diubah ke ${data?.data?.priority_label || selectedPriority}` 
+      toast({
+        title: "Berhasil",
+        description: `Priority diubah ke ${data?.data?.priority_label || selectedPriority}`
       })
     },
     onError: (error: any) => {
@@ -313,21 +339,114 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
   // ============================================
 
   const handleOpenTicket = () => {
-    if (canModify) setShowProcessDialog(true)
+    if (canModify) {
+      // Reset dialog state
+      setProcessDialogTeam("")
+      setProcessDialogMember("")
+      setShowProcessDialog(true)
+    }
+  }
+
+  // Handler untuk proses ticket dengan team/member assignment
+  const handleProcessTicketWithAssignment = async () => {
+    if (!processDialogTeam) {
+      toast({
+        title: "Gagal",
+        description: "Pilih team terlebih dahulu",
+        variant: "destructive",
+      })
+      return
+    }
+    if (!processDialogMember) {
+      toast({
+        title: "Gagal",
+        description: "Pilih member terlebih dahulu",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const teamIdNum = parseInt(processDialogTeam)
+    const employeeIdNum = parseInt(processDialogMember, 10)
+
+    if (Number.isNaN(teamIdNum) || Number.isNaN(employeeIdNum)) {
+      toast({
+        title: "Gagal",
+        description: "Team atau member tidak valid",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      // 1. Assign team terlebih dahulu
+      await assignTeam.mutateAsync(teamIdNum)
+      // 2. Assign member
+      await assignByEmployee.mutateAsync(employeeIdNum)
+      // 3. Open ticket
+      await openTicket.mutateAsync(undefined)
+      setShowProcessDialog(false)
+      setProcessDialogTeam("")
+      setProcessDialogMember("")
+    } catch (error: any) {
+      toast({
+        title: "Gagal",
+        description: getErrorMessage(error),
+        variant: "destructive",
+      })
+    }
   }
 
   const handleTeamChange = (value: string) => {
-    setSelectedTeam(value)
-    const tid = parseInt(value)
-    if (tid && canModify) assignTeam.mutate(tid)
+    // Di tahap Draft, tidak langsung mutate - tunggu konfirmasi di dialog
+    if (isDraft) {
+      // Tidak ada aksi langsung di Draft
+      return
+    }
+    // Di In Progress, set selectedTeam dulu lalu tampilkan popup konfirmasi
+    if (isInProgress && canModify) {
+      setSelectedTeam(value)
+      setShowAssignTeamDialog(true)
+    } else if (!isDraft && canModify) {
+      // Fallback: jika bukan draft dan bukan in progress, langsung assign (untuk safety)
+      const tid = parseInt(value)
+      if (tid) {
+        setSelectedTeam(value)
+        assignTeam.mutate(tid)
+      }
+    }
   }
 
   const handleMemberChange = (value: string) => {
     setSelectedMember(value)
-    const employeeId = parseInt(value, 10)
-    if (!Number.isNaN(employeeId) && canModify) {
-      // Assign by employee_id - backend mendukung assign tanpa wajib user_id (nama employee tampil di ticket)
-      assignByEmployee.mutate(employeeId)
+    // Di tahap Draft, tidak langsung mutate - tunggu konfirmasi di dialog
+    // Di tahap In Progress, tampilkan popup konfirmasi jika team sudah dipilih
+    if (isDraft) {
+      // Tidak ada aksi langsung di Draft
+      return
+    }
+    // Di In Progress, jika team sudah dipilih, langsung assign (atau bisa juga pakai popup)
+    // Untuk konsistensi, kita pakai popup juga
+    if (isInProgress && canModify && teamId) {
+      const employeeId = parseInt(value, 10)
+      if (!Number.isNaN(employeeId)) {
+        assignByEmployee.mutate(employeeId)
+      }
+    }
+  }
+
+  // Handler untuk konfirmasi assign team di In Progress
+  const handleConfirmAssignTeam = () => {
+    const tid = parseInt(selectedTeam)
+    if (tid && canModify) {
+      assignTeam.mutate(tid, {
+        onSuccess: () => {
+          setShowAssignTeamDialog(false)
+        },
+        onError: () => {
+          // Keep dialog open on error so user can retry or cancel
+        }
+      })
     }
   }
 
@@ -342,7 +461,7 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
   }
 
   const handleCloseTicket = () => {
-    if (canModify) closeTicket.mutate(confirmMessage)
+    if (canClose) closeTicket.mutate(confirmMessage)
   }
 
   const handleRejectTicket = () => {
@@ -389,33 +508,19 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-4 space-y-4">
-        
-        {/* Status Info */}
-        {isClosed && (
-          <div className="p-3 rounded-lg bg-green-50 border border-green-200 space-y-1">
-            <p className="text-sm font-semibold text-green-800">✅ Ticket Selesai</p>
-            <p className="text-xs text-green-700">
-              Diselesaikan pada:{" "}
-              <span className="font-medium">
-                {ticket.end_date 
-                  ? new Date(ticket.end_date).toLocaleDateString("id-ID", {
-                      weekday: "long", day: "numeric", month: "long", year: "numeric",
-                      hour: "2-digit", minute: "2-digit"
-                    })
-                  : ticket.write_date
-                    ? new Date(ticket.write_date).toLocaleDateString("id-ID", {
-                        weekday: "long", day: "numeric", month: "long", year: "numeric",
-                        hour: "2-digit", minute: "2-digit"
-                      })
-                    : "-"
-                }
-              </span>
-            </p>
-          </div>
+
+        {/* Status ringkas — detail sudah di TicketHeader */}
+        {(isClosed || ticket.is_rejected) && (
+          <p className="text-sm text-muted-foreground text-center py-2">
+            {ticket.is_rejected
+              ? "Ticket ini sudah ditolak. Tidak ada aksi tersedia."
+              : "Ticket ini sudah selesai. Tidak ada aksi tersedia."
+            }
+          </p>
         )}
 
-        {/* 1. Set Priority - PALING ATAS (harus di-set dulu) */}
-        {canDraftAction && (
+        {/* 1. Set Priority - hanya dept_admin/super_admin */}
+        {canModify && canDraftAction && (
           <div className="space-y-2 p-3 rounded-lg bg-amber-50/50 border border-amber-200">
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-amber-600" />
@@ -441,8 +546,8 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
           </div>
         )}
 
-        {/* 2. Tolak Ticket */}
-        {canDraftAction && (
+        {/* 2. Tolak Ticket - hanya dept_admin/super_admin */}
+        {canModify && canDraftAction && (
           <div className="flex items-center justify-between p-3 rounded-lg bg-red-50/50 border border-red-200">
             <div className="flex items-center gap-2">
               <XCircle className="h-4 w-4 text-red-600" />
@@ -459,8 +564,8 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
           </div>
         )}
 
-        {/* 3. Proses Ticket PALING BAWAH */}
-        {canDraftAction && (
+        {/* 3. Proses Ticket - hanya dept_admin/super_admin */}
+        {canModify && canDraftAction && (
           <div className="p-3 rounded-lg border-2 border-dashed border-primary/30 bg-primary/5">
             <Button
               onClick={() => setShowProcessDialog(true)}
@@ -482,44 +587,21 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
           </div>
         )}
 
-        {/* Ticket Rejected Info */}
-        {ticket.is_rejected && (
-          <div className="p-3 rounded-lg bg-red-50 border border-red-200">
-            <div className="flex items-center gap-2 mb-2">
-              <XCircle className="h-4 w-4 text-red-600" />
-              <span className="text-sm font-semibold text-red-800">Ticket Ditolak</span>
-            </div>
-            {ticket.rejection_reason && (
-              <p className="text-sm text-red-700">
-                <strong>Alasan:</strong> {ticket.rejection_reason}
-              </p>
-            )}
-            {ticket.rejected_date && (
-              <p className="text-xs text-red-600 mt-1">
-                Ditolak pada: {new Date(ticket.rejected_date).toLocaleDateString("id-ID", {
-                  weekday: "long", day: "numeric", month: "long", year: "numeric",
-                  hour: "2-digit", minute: "2-digit"
-                })}
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* 2. Assign Team & Member */}
-        {!isClosed && !ticket.is_rejected && (
+        {/* Assign Team & Member - hanya dept_admin/super_admin */}
+        {canModify && !isClosed && !ticket.is_rejected && (
           <div className="space-y-3 p-3 rounded-lg bg-muted/30">
             <div className="flex items-center gap-2 mb-2">
               <Users className="h-4 w-4 text-primary" />
               <span className="text-sm font-medium">Assignment</span>
             </div>
-            
+
             {/* Info: Disabled when Draft */}
             {isDraft && (
               <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
-                ⚠️ Proses ticket terlebih dahulu untuk mengatur assignment
+                ⚠️ Assignment akan dilakukan saat proses ticket (di popup konfirmasi)
               </p>
             )}
-            
+
             {/* Team Selection */}
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Team</Label>
@@ -547,17 +629,17 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Assign ke Member</Label>
               <div className="flex gap-2">
-                <Select 
-                  value={selectedMember} 
+                <Select
+                  value={selectedMember}
                   onValueChange={handleMemberChange}
                   disabled={isDraft || !teamId || teamMembersLoading}
                 >
                   <SelectTrigger disabled={isDraft || assignByEmployee.isPending || assignUser.isPending} className="bg-background">
                     <SelectValue placeholder={
                       !teamId
-                        ? "Pilih team dulu" 
-                        : teamMembersLoading 
-                          ? "Loading..." 
+                        ? "Pilih team dulu"
+                        : teamMembersLoading
+                          ? "Loading..."
                           : "Pilih member..."
                     } />
                   </SelectTrigger>
@@ -611,8 +693,8 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
         {/* Stage tidak lagi bisa dipilih manual - hanya berubah via tombol:
             Proses Ticket → In Progress, Minta Konfirmasi User → Waiting for User, User konfirmasi → Closed */}
 
-        {/* 3. Activity Log */}
-        {!isClosed && !isDraft && (
+        {/* Activity Log - hanya dept_admin/super_admin */}
+        {canModify && !isClosed && !isDraft && (
           <div className="space-y-2 p-3 rounded-lg bg-blue-50/50 border border-blue-100">
             <div className="flex items-center gap-2">
               <ClipboardList className="h-4 w-4 text-blue-600" />
@@ -643,8 +725,8 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
           </div>
         )}
 
-        {/* 4. Close/Complete Ticket */}
-        {!isClosed && !isDraft && !ticket.is_rejected && (
+        {/* Close/Complete Ticket - admin atau ticket owner (assigned PIC) */}
+        {canClose && !isClosed && !isDraft && !ticket.is_rejected && (
           <div className="space-y-2 pt-3 border-t">
             <Label className="text-sm font-medium">Selesaikan Ticket</Label>
 
@@ -733,7 +815,14 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
       </Dialog>
 
       {/* Dialog: Proses Ticket */}
-      <Dialog open={showProcessDialog} onOpenChange={setShowProcessDialog}>
+      <Dialog open={showProcessDialog} onOpenChange={(open) => {
+        setShowProcessDialog(open)
+        if (!open) {
+          // Reset dialog state when closed
+          setProcessDialogTeam("")
+          setProcessDialogMember("")
+        }
+      }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -744,7 +833,7 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
               Ticket #{ticket.ticket_number} — {ticket.subject}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3 py-2">
+          <div className="space-y-4 py-2">
             <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
               <p className="text-sm text-blue-800">
                 Status akan berubah: <strong>Draft → In Progress</strong>
@@ -753,23 +842,146 @@ export function TicketAdminActions({ ticket, canModify }: TicketAdminActionsProp
                 Priority: <strong>{PRIORITY_OPTIONS.find(o => o.value === selectedPriority)?.label ?? "-"}</strong>
               </p>
             </div>
+
+            {/* Team Selection - Wajib di Draft */}
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">
+                Pilih Team <span className="text-destructive">*</span>
+              </Label>
+              <Select 
+                value={processDialogTeam} 
+                onValueChange={setProcessDialogTeam}
+                disabled={openTicket.isPending || assignTeam.isPending || assignByEmployee.isPending}
+              >
+                <SelectTrigger className="bg-background">
+                  <SelectValue placeholder="Pilih team..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {teams.map((team) => (
+                    <SelectItem key={team.id} value={team.id.toString()}>
+                      <span className="flex items-center gap-2">
+                        <Users className="h-3 w-3" />
+                        {team.name}
+                        <span className="text-xs text-muted-foreground">
+                          ({team.member_count || 0})
+                        </span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Member Selection - Wajib di Draft */}
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">
+                Pilih Member <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={processDialogMember}
+                onValueChange={setProcessDialogMember}
+                disabled={!processDialogTeam || openTicket.isPending || assignTeam.isPending || assignByEmployee.isPending || processDialogTeamMembersLoading}
+              >
+                <SelectTrigger className="bg-background">
+                  <SelectValue placeholder={
+                    !processDialogTeam
+                      ? "Pilih team dulu"
+                      : processDialogTeamMembersLoading
+                        ? "Loading..."
+                        : "Pilih member..."
+                  } />
+                </SelectTrigger>
+                <SelectContent>
+                  {processDialogTeamMembers.length > 0 ? (
+                    processDialogTeamMembers.map((member) => (
+                      <SelectItem key={member.id} value={member.id.toString()}>
+                        <span className="flex items-center gap-2">
+                          <User className="h-3 w-3" />
+                          {member.name}
+                          {member.nik && <span className="text-xs text-muted-foreground">({member.nik})</span>}
+                        </span>
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="_empty" disabled>
+                      {processDialogTeam ? "Tidak ada member" : "Pilih team dulu"}
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              {processDialogTeam && !processDialogTeamMembersLoading && processDialogTeamMembers.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Tidak ada member di team ini. Tambah member (Employee) di Odoo: Helpdesk → Konfigurasi → Team.
+                </p>
+              )}
+            </div>
+
             <p className="text-sm text-muted-foreground">
-              Yakin ingin mulai memproses ticket ini?
+              Pastikan team dan member sudah dipilih sebelum memproses ticket.
             </p>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setShowProcessDialog(false)} disabled={openTicket.isPending}>
+            <Button variant="outline" onClick={() => {
+              setShowProcessDialog(false)
+              setProcessDialogTeam("")
+              setProcessDialogMember("")
+            }} disabled={openTicket.isPending || assignTeam.isPending || assignByEmployee.isPending}>
               Batal
             </Button>
             <Button
-              onClick={() => {
-                openTicket.mutate(undefined)
-                setShowProcessDialog(false)
-              }}
-              disabled={openTicket.isPending}
+              onClick={handleProcessTicketWithAssignment}
+              disabled={openTicket.isPending || assignTeam.isPending || assignByEmployee.isPending || !processDialogTeam || !processDialogMember}
             >
-              {openTicket.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+              {(openTicket.isPending || assignTeam.isPending || assignByEmployee.isPending) ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Play className="mr-2 h-4 w-4" />
+              )}
               Ya, Proses Sekarang
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Konfirmasi Assign Team (In Progress stage) */}
+      <Dialog open={showAssignTeamDialog} onOpenChange={setShowAssignTeamDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-primary" />
+              Ubah Team Assignment
+            </DialogTitle>
+            <DialogDescription>
+              Ticket #{ticket.ticket_number} — {ticket.subject}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
+              <p className="text-sm text-amber-800">
+                Team saat ini: <strong>{ticket.team?.name ?? "-"}</strong>
+              </p>
+              <p className="text-sm text-amber-700 mt-1">
+                Team baru: <strong>{teams.find(t => t.id.toString() === selectedTeam)?.name ?? "-"}</strong>
+              </p>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Yakin ingin mengubah team assignment? Perubahan ini akan tercatat di activity log.
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => {
+              // Reset selectedTeam ke team yang sekarang sebelum close
+              setSelectedTeam(teamId?.toString() ?? "")
+              setShowAssignTeamDialog(false)
+            }} disabled={assignTeam.isPending}>
+              Batal
+            </Button>
+            <Button
+              onClick={handleConfirmAssignTeam}
+              disabled={assignTeam.isPending}
+            >
+              {assignTeam.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Users className="mr-2 h-4 w-4" />}
+              Ya, Ubah Team
             </Button>
           </DialogFooter>
         </DialogContent>

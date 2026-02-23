@@ -65,13 +65,61 @@ export function TicketHeader({ ticket }: TicketHeaderProps) {
               )}
               {ticket.rejected_date && (
                 <p className="text-xs text-red-600 mt-2">
-                  Ditolak pada: {new Date(ticket.rejected_date).toLocaleString("id-ID")}
+                  Ditolak pada: {new Date(ticket.rejected_date).toLocaleDateString("id-ID", {
+                    weekday: "long", day: "numeric", month: "long", year: "numeric",
+                    hour: "2-digit", minute: "2-digit"
+                  })}
                 </p>
               )}
             </div>
           </div>
         </div>
       )}
+
+      {/* Banner Ticket Selesai */}
+      {!ticket.is_rejected && (
+        ticket.stage?.name?.toLowerCase().includes("closed") || ticket.resolution_confirmed
+      ) && (() => {
+        // Hitung durasi penyelesaian
+        const startDate = ticket.start_date ? new Date(ticket.start_date) : new Date(ticket.create_date)
+        const endDate = ticket.end_date ? new Date(ticket.end_date) : (ticket.write_date ? new Date(ticket.write_date) : null)
+        
+        let durationDays = null
+        if (endDate) {
+          const diffTime = endDate.getTime() - startDate.getTime()
+          durationDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+        }
+
+        return (
+          <div className="p-4 rounded-lg bg-green-50 border border-green-200">
+            <div className="flex items-start gap-3">
+              <div className="shrink-0 w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
+                <span className="text-green-600 text-lg">✓</span>
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-green-800">Ticket Selesai</h3>
+                <p className="text-xs text-green-600 mt-1">
+                  Diselesaikan pada:{" "}
+                  {endDate
+                    ? endDate.toLocaleDateString("id-ID", {
+                        weekday: "long", day: "numeric", month: "long", year: "numeric",
+                        hour: "2-digit", minute: "2-digit"
+                      })
+                    : "-"
+                  }
+                </p>
+                {durationDays !== null && (
+                  <p className="text-xs font-medium text-green-700 mt-2">
+                    <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
+                      Diselesaikan dalam {durationDays} {durationDays === 1 ? "hari" : "hari"}
+                    </Badge>
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       <div>
         {ticket.ticket_category_type === "system" && ticket.system_category && (

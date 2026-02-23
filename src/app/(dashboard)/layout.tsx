@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { useAuthStore } from "@/store/authStore"
 import { Sidebar } from "@/components/layout/Sidebar"
 import { Navbar } from "@/components/layout/Navbar"
+import { authAPI } from "@/lib/api/endpoints"
 
 export default function DashboardLayout({
   children,
@@ -36,6 +37,24 @@ export default function DashboardLayout({
       router.push("/login")
     }
   }, [isHydrated, isAuthenticated, hasToken, router])
+
+  // Re-validate role dari server saat halaman dashboard di-load (cegah manipulasi role di localStorage)
+  useEffect(() => {
+    if (!isHydrated || !hasToken || typeof window === "undefined") return
+    const token = localStorage.getItem("access_token") ?? useAuthStore.getState().accessToken
+    if (!token) return
+    authAPI
+      .me()
+      .then((res) => {
+        const employee = res.data
+        if (employee) {
+          useAuthStore.getState().setAuth({ employee, accessToken: token })
+        }
+      })
+      .catch(() => {
+        // Token invalid / expired — biarkan redirect handled by existing auth check
+      })
+  }, [isHydrated, hasToken])
 
   // Loading state saat belum hydrated
   if (!isHydrated) {

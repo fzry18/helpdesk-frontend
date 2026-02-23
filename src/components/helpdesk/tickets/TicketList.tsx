@@ -10,18 +10,20 @@ import { Inbox } from "lucide-react"
 import { useDebounce } from "@/hooks/use-performance"
 import type { Ticket } from "@/types"
 
-const STATUS_ORDER: ("Open" | "In Progress" | "Closed")[] = ["Open", "In Progress", "Closed"]
-const STATUS_LABELS: Record<"Open" | "In Progress" | "Closed", string> = {
+const STATUS_ORDER: ("Open" | "In Progress" | "Closed" | "Rejected")[] = ["Open", "In Progress", "Closed", "Rejected"]
+const STATUS_LABELS: Record<"Open" | "In Progress" | "Closed" | "Rejected", string> = {
   Open: "Terbuka",
   "In Progress": "In Progress", 
   Closed: "Selesai",
+  Rejected: "Ditolak",
 }
 
 // Virtual list item height
 const ITEM_HEIGHT = 220
 
 /** Group by stage/status (sama dengan RecentTickets). Daftar hasil filter lalu dikelompokkan. */
-function getTicketStatusGroup(ticket: Ticket): "Open" | "In Progress" | "Closed" {
+function getTicketStatusGroup(ticket: Ticket): "Open" | "In Progress" | "Closed" | "Rejected" {
+  if (ticket.is_rejected) return "Rejected"
   const name = ((ticket.stage?.actual_name ?? ticket.stage?.name) ?? "").toString().toLowerCase()
   if (
     name.includes("closed") ||
@@ -125,12 +127,13 @@ export function TicketList({
   }, [tickets, searchTerm])
 
   const visibleGroups = useMemo(() => {
-    if (!filteredTickets || filteredTickets.length === 0) return [] as Array<{ key: "Open" | "In Progress" | "Closed"; tickets: Ticket[] }>
+    if (!filteredTickets || filteredTickets.length === 0) return [] as Array<{ key: "Open" | "In Progress" | "Closed" | "Rejected"; tickets: Ticket[] }>
 
-    const groups: Record<"Open" | "In Progress" | "Closed", Ticket[]> = {
+    const groups: Record<"Open" | "In Progress" | "Closed" | "Rejected", Ticket[]> = {
       Open: [],
       "In Progress": [],
       Closed: [],
+      Rejected: [],
     }
     for (const t of filteredTickets) {
       const group = getTicketStatusGroup(t)

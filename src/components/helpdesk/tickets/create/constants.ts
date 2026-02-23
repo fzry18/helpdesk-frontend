@@ -45,6 +45,28 @@ export const createTicketSchema = z.object({
   captured_record_ref: z.string().optional(),
   captured_menu_path: z.string().optional(),
   captured_browser: z.string().optional(),
-})
+}).refine(
+  (data) => {
+    if (data.ticket_category_type === "helper") {
+      return !!data.helper_category && data.helper_category.trim() !== ""
+    }
+    return true
+  },
+  {
+    message: "Kategori masalah wajib diisi untuk tiket helper",
+    path: ["helper_category"],
+  }
+).refine(
+  (data) => {
+    if (data.ticket_category_type === "system") {
+      return !!data.system_category
+    }
+    return true
+  },
+  {
+    message: "Sistem wajib dipilih untuk tiket system",
+    path: ["system_category"],
+  }
+)
 
 export type CreateTicketForm = z.infer<typeof createTicketSchema>

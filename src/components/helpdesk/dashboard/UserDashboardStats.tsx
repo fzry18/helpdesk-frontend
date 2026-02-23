@@ -1,7 +1,7 @@
 "use client"
 
 import { StatCard } from "@/components/ui/stat-card"
-import { Ticket, AlertCircle, Clock, CheckCircle2 } from "lucide-react"
+import { Ticket, AlertCircle, Clock, CheckCircle2, XCircle } from "lucide-react"
 
 interface UserDashboardStatsProps {
   stats: {
@@ -9,6 +9,7 @@ interface UserDashboardStatsProps {
     open: number
     inProgress: number
     closed: number
+    rejected?: number
   } | null
   isLoading: boolean
 }
@@ -16,8 +17,8 @@ interface UserDashboardStatsProps {
 export function UserDashboardStats({ stats, isLoading }: UserDashboardStatsProps) {
   if (isLoading) {
     return (
-      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
-        {[1, 2, 3, 4].map((i) => (
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-5">
+        {[1, 2, 3, 4, 5].map((i) => (
           <div key={i} className="h-24 sm:h-32 animate-pulse rounded-lg bg-muted" />
         ))}
       </div>
@@ -28,13 +29,15 @@ export function UserDashboardStats({ stats, isLoading }: UserDashboardStatsProps
   const open = stats?.open ?? 0
   const inProgress = stats?.inProgress ?? 0
   const closed = stats?.closed ?? 0
+  const rejected = stats?.rejected ?? 0
 
   return (
-    <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-5">
       <StatCard title="Total Ticket" value={total} icon={Ticket} color="blue" />
       <StatCard title="Terbuka" value={open} icon={AlertCircle} color="orange" />
       <StatCard title="In Progress" value={inProgress} icon={Clock} color="purple" />
       <StatCard title="Selesai" value={closed} icon={CheckCircle2} color="green" />
+      <StatCard title="Ditolak" value={rejected} icon={XCircle} color="red" />
     </div>
   )
 }

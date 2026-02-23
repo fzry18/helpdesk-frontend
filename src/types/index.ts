@@ -11,6 +11,8 @@ export interface Employee {
   phone: string
   is_manager?: boolean
   helpdesk_role?: 'user' | 'dept_admin' | 'super_admin'
+  user_type?: 'odoo_user' | 'nik_only'
+  has_odoo_account?: boolean
 }
 
 export interface LoginRequest {
@@ -90,9 +92,9 @@ export interface Ticket {
   captured_at?: string
   is_from_floating_button?: boolean
   total_time_spent?: number
-  tags?: any[]
-  products?: any[]
-  attachments?: any[]
+  tags?: Tag[]
+  products?: Array<{ id: number; name: string }>
+  attachments?: Attachment[]
 }
 
 export interface Message {

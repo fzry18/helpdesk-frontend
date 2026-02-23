@@ -8,14 +8,16 @@ import { TicketList } from "@/components/helpdesk/tickets/TicketList"
 import { TicketFilters, type TicketFilterValues } from "@/components/helpdesk/tickets/TicketFilters"
 import { CreateTicketDialog } from "@/components/helpdesk/tickets/create/CreateTicketDialog"
 import { Button } from "@/components/ui/button"
-import { Plus, ChevronLeft, ChevronRight, ArrowLeft, List } from "lucide-react"
+import { Plus, ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react"
 import { useTicketList } from "@/hooks/use-ticket-queries"
 import { useTicketWebSocket } from "@/hooks/use-ticket-websocket"
 import type { Ticket } from "@/types"
 
 const PAGE_SIZE = 20
 
-function getTicketStatusGroup(ticket: Ticket): "Open" | "In Progress" | "Closed" {
+function getTicketStatusGroup(ticket: Ticket): "Open" | "In Progress" | "Closed" | "Rejected" {
+  // Pastikan ticket yang ditolak tidak ikut dihitung sebagai Closed
+  if (ticket.is_rejected) return "Rejected"
   const name = ((ticket.stage?.actual_name ?? ticket.stage?.name) ?? "").toString().toLowerCase()
   if (name.includes("closed") || name.includes("selesai") || ticket.resolution_confirmed === true) return "Closed"
   if (name.includes("progress") || name.includes("in progress") || name.includes("awaiting") || name.includes("confirmation") || name.includes("menunggu")) return "In Progress"
@@ -28,7 +30,7 @@ function isTicketDraft(ticket: Ticket): boolean {
 }
 
 export default function TicketsPage() {
-  const isAdmin = useAuthStore((s) => s.isAdmin())
+  const helpdeskRole = useAuthStore((s) => s.getHelpdeskRole())
   const searchParams = useSearchParams()
   const urlStatus = searchParams.get("status")
   const createdToday = searchParams.get("created_today")
@@ -42,6 +44,7 @@ export default function TicketsPage() {
     if (urlStatus === "draft") return "Draft"
     if (urlStatus === "in_progress") return "In Progress"
     if (urlStatus === "closed") return "Tiket Selesai"
+    if (urlStatus === "rejected") return "Ditolak"
     return null
   }
   const filterLabel = getFilterLabel()
@@ -57,17 +60,18 @@ export default function TicketsPage() {
     if (filters.status === "draft") return "open" // Backend doesn't have draft, filter client-side
     if (filters.status === "in_progress") return "open" // Backend doesn't have in_progress, filter client-side
     if (filters.status === "closed") return "closed"
+    if (filters.status === "rejected") return "closed" // rejected = subset dari closed, filter di FE
     return "all"
   }, [filters.status])
 
-  // Fetch tickets with pagination
+  // Fetch tickets with pagination (hanya user yang pakai my_tickets; admin/dept_admin backend filter)
   const { data, isLoading, error, isFetching } = useTicketList({
     page,
     limit: PAGE_SIZE,
     status: apiStatus,
     priority: filters.priority,
     ticket_category_type: filters.ticket_category_type,
-    my_tickets: !isAdmin,
+    my_tickets: helpdeskRole === "user",
   })
 
   // WebSocket untuk real-time updates
@@ -103,6 +107,12 @@ export default function TicketsPage() {
     }
     if (filters.status === "open") {
       return list.filter((t) => getTicketStatusGroup(t) === "Open")
+    }
+    if (filters.status === "closed") {
+      return list.filter((t) => getTicketStatusGroup(t) === "Closed")
+    }
+    if (filters.status === "rejected") {
+      return list.filter((t) => getTicketStatusGroup(t) === "Rejected")
     }
     return list
   }, [data?.data, filters.status, createdToday])
@@ -143,14 +153,6 @@ export default function TicketsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {isFilteredView && (
-            <Link href="/tickets">
-              <Button variant="outline" size="lg" className="w-full shrink-0 sm:w-auto">
-                <List className="mr-2 h-5 w-5" />
-                Lihat Semua Tiket
-              </Button>
-            </Link>
-          )}
           {!isFilteredView && (
             <CreateTicketDialog
               trigger={
