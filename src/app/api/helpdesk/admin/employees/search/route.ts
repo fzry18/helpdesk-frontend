@@ -8,6 +8,7 @@ import { getAuthEmployee, authError, isSuperAdmin, getSessionOdooToken } from "@
 import {
   odooSearchEmployeeByName,
   odooSearchEmployeeByNik,
+  parseOdooEmployeeName,
 } from "@/lib/server/odoo-client"
 
 export async function GET(request: NextRequest) {
@@ -59,20 +60,22 @@ export async function GET(request: NextRequest) {
 
     const localRoleMap = new Map(localEmployees.map((e) => [e.nik, e.helpdeskRole]))
 
-    const results = odooRes.data.map((emp) => ({
-      odoo_id: emp.id,
-      nik: emp.nik,
-      name: emp.name,
-      department: emp.department_id?.[1] || "",
-      department_id: emp.department_id?.[0] || null,
-      job_title: emp.job_id?.[1] || "",
-      email: emp.work_email || emp.email || "",
-      phone: emp.mobile_phone || emp.phone_contact || "",
-      operating_unit: emp.operating_unit?.[1] || "",
-      helpdesk_role: localRoleMap.has(emp.nik)
-        ? localRoleMap.get(emp.nik)!.toLowerCase()
-        : "user",
-    }))
+    const results = odooRes.data
+      .filter((emp) => emp.nik) // Skip employees without NIK
+      .map((emp) => ({
+        odoo_id: emp.id,
+        nik: emp.nik,
+        name: parseOdooEmployeeName(emp),
+        department: emp.department_id?.[1] || "",
+        department_id: emp.department_id?.[0] || null,
+        job_title: emp.job_id?.[1] || "",
+        email: emp.work_email || emp.email || "",
+        phone: emp.mobile_phone || emp.phone_contact || "",
+        operating_unit: emp.operating_unit?.[1] || "",
+        helpdesk_role: localRoleMap.has(emp.nik)
+          ? localRoleMap.get(emp.nik)!.toLowerCase()
+          : "user",
+      }))
 
     return Response.json({
       success: true,

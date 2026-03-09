@@ -36,7 +36,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     data: {
       ticketId,
       employeeId: employee.id,
-      activityType: "assignment",
+      activityType: "team_assignment",
       content: body.message || `Ticket di-assign ke team ${team.name}`,
     },
   })

@@ -217,11 +217,13 @@ model Category {
 }
 
 model Team {
-  id          Int       @id @default(autoincrement())
-  name        String    @unique
-  description String?
-  isActive    Boolean   @default(true) @map("is_active")
-  createdAt   DateTime  @default(now()) @map("created_at")
+  id             Int       @id @default(autoincrement())
+  name           String    @unique
+  description    String?
+  departmentId   Int?      @map("department_id")
+  departmentName String?   @map("department_name")
+  isActive       Boolean   @default(true) @map("is_active")
+  createdAt      DateTime  @default(now()) @map("created_at")
 
   tickets     Ticket[]
   members     TeamMember[]

@@ -43,12 +43,13 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     include: TICKET_INCLUDES,
   })
 
+  const assignee = await prisma.employee.findUnique({ where: { id: assigneeId }, select: { name: true } })
   await prisma.activityLog.create({
     data: {
       ticketId,
       employeeId: employee.id,
       activityType: "assignment",
-      content: `Ticket di-assign ke employee #${assigneeId}`,
+      content: `Ticket di-assign ke member ${assignee?.name || `#${assigneeId}`}`,
     },
   })
 

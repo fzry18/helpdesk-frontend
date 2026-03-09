@@ -170,6 +170,10 @@ export interface Team {
   id: number
   name: string
   email?: string
+  department_id?: number | null
+  department_name?: string | null
+  description?: string | null
+  is_active?: boolean
   leader?: { id: number; name: string } | null
   leader_employee?: { id: number; name: string; nik?: string } | null
   member_count?: number

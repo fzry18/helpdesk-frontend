@@ -7,7 +7,9 @@ interface DashboardStatsProps {
   stats: {
     summary: {
       total: number
+      draft: number
       open: number
+      in_progress: number
       closed: number
       rejected: number
       unassigned: number
@@ -31,33 +33,6 @@ interface DashboardStatsProps {
 }
 
 export function DashboardStats({ stats, isLoading, onStatClick }: DashboardStatsProps) {
-  // Mock trends - in real app, these would come from API comparing to previous period
-  const mockTrends = {
-    total: { value: 12, isPositive: true },
-    draft: { value: 3, isPositive: true },
-    inProgress: { value: 5, isPositive: true },
-    closed: { value: 8, isPositive: true },
-    today: { value: 2, isPositive: true },
-  }
-
-  // Count draft tickets from by_stage where stage name contains "draft", "new", or "baru"
-  const getDraftCount = () => {
-    if (!stats?.by_stage) return 0
-    return stats.by_stage
-      .filter((stage) => {
-        const name = stage.name.toLowerCase()
-        return name.includes("draft") || name.includes("new") || name.includes("baru")
-      })
-      .reduce((sum, stage) => sum + stage.count, 0)
-  }
-
-  // In Progress = open - draft
-  const getInProgressCount = () => {
-    const open = stats?.summary?.open || 0
-    const draft = getDraftCount()
-    return Math.max(0, open - draft)
-  }
-
   if (isLoading) {
     return (
       <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-6">
@@ -75,23 +50,20 @@ export function DashboardStats({ stats, isLoading, onStatClick }: DashboardStats
         value={stats?.summary?.total || 0}
         icon={Ticket}
         color="blue"
-        trend={mockTrends.total}
         onClick={() => onStatClick?.("all")}
       />
       <StatCard
         title="Draft"
-        value={getDraftCount()}
+        value={stats?.summary?.draft || 0}
         icon={FileEdit}
         color="orange"
-        trend={mockTrends.draft}
         onClick={() => onStatClick?.("draft")}
       />
       <StatCard
         title="In Progress"
-        value={getInProgressCount()}
+        value={stats?.summary?.in_progress || 0}
         icon={Clock}
         color="amber"
-        trend={mockTrends.inProgress}
         onClick={() => onStatClick?.("in_progress")}
       />
       <StatCard
@@ -99,7 +71,6 @@ export function DashboardStats({ stats, isLoading, onStatClick }: DashboardStats
         value={stats?.summary?.closed || 0}
         icon={CheckCircle2}
         color="green"
-        trend={mockTrends.closed}
         onClick={() => onStatClick?.("closed")}
       />
       <StatCard
@@ -114,7 +85,6 @@ export function DashboardStats({ stats, isLoading, onStatClick }: DashboardStats
         value={stats?.period?.today || 0}
         icon={Calendar}
         color="purple"
-        trend={mockTrends.today}
         onClick={() => onStatClick?.("today")}
       />
     </div>

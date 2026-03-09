@@ -108,7 +108,9 @@ export async function GET(request: NextRequest) {
     data: {
       summary: {
         total,
+        draft: open,
         open: open + inProgress,
+        in_progress: inProgress,
         closed: resolved + closed,
         unassigned,
         waiting_confirmation: waitingConfirmation,

@@ -85,49 +85,37 @@ export function TicketAdminActions({ ticket, canModify, isTicketOwner = false }:
     setSelectedPriority(ticket.priority ?? "")
   }, [ticket.priority])
 
-  // Fetch teams
+  // Fetch teams (backend filters by dept_admin's department)
   const { data: teamsData } = useQuery({
     queryKey: ["teams"],
     queryFn: () => masterDataAPI.getTeams(),
   })
 
-  // Fetch team detail (dengan members) ketika team dipilih
-  const { data: teamDetailData, isLoading: teamDetailLoading } = useQuery({
-    queryKey: ["team", teamId],
-    queryFn: () => masterDataAPI.getTeam(teamId!),
-    enabled: !!teamId,
-  })
-  // Fallback: jika getTeam mengembalikan members kosong, ambil dari endpoint /teams/:id/members
-  const membersFromDetailRaw = (teamDetailData?.data as { members?: unknown[] } | undefined)?.members ?? []
-  const { data: teamMembersOnlyData } = useQuery({
-    queryKey: ["team", teamId, "members"],
-    queryFn: () => masterDataAPI.getTeamMembers(teamId!),
-    enabled: !!teamId && !!teamDetailData?.data && Array.isArray(membersFromDetailRaw) && membersFromDetailRaw.length === 0,
-  })
-
+  // Auto-select team when dept_admin has only 1 team available
   const teams = teamsData?.data || []
-  const membersFromDetail = membersFromDetailRaw as Array<{ id: number; name?: string; user_id?: number | null; nik?: string }>
-  const membersFromFallback = (teamMembersOnlyData?.data as unknown as Array<{ id: number; name?: string; user_id?: number | null; nik?: string }>) ?? []
-  const teamMembers = membersFromDetail.length > 0 ? membersFromDetail : membersFromFallback
-  const teamMembersLoading = teamDetailLoading
+  useEffect(() => {
+    if (teams.length === 1 && !teamId) {
+      const singleTeam = teams[0].id.toString()
+      setSelectedTeam(singleTeam)
+      setProcessDialogTeam(singleTeam)
+    }
+  }, [teams, teamId])
 
-  // Fetch team members untuk dialog proses (ketika team dipilih di dialog)
+  // Get members from the already-fetched teams list (teams response includes members)
+  type TeamMemberInfo = { id: number; employee_id?: number; name?: string; user_id?: number | null; nik?: string }
+  const getTeamMembers = (tId: number | null): TeamMemberInfo[] => {
+    if (!tId) return []
+    const team = teams.find((t) => t.id === tId) as (typeof teams)[number] & { members?: TeamMemberInfo[] } | undefined
+    return team?.members || []
+  }
+
+  const teamMembers = getTeamMembers(teamId ?? null)
+  const teamMembersLoading = false
+
+  // Get members for process dialog
   const processDialogTeamId = processDialogTeam ? parseInt(processDialogTeam) : null
-  const { data: processTeamDetailData, isLoading: processTeamDetailLoading } = useQuery({
-    queryKey: ["team", processDialogTeamId],
-    queryFn: () => masterDataAPI.getTeam(processDialogTeamId!),
-    enabled: !!processDialogTeamId,
-  })
-  const processMembersFromDetailRaw = (processTeamDetailData?.data as { members?: unknown[] } | undefined)?.members ?? []
-  const { data: processTeamMembersOnlyData } = useQuery({
-    queryKey: ["team", processDialogTeamId, "members"],
-    queryFn: () => masterDataAPI.getTeamMembers(processDialogTeamId!),
-    enabled: !!processDialogTeamId && !!processTeamDetailData?.data && Array.isArray(processMembersFromDetailRaw) && processMembersFromDetailRaw.length === 0,
-  })
-  const processMembersFromDetail = processMembersFromDetailRaw as Array<{ id: number; name?: string; user_id?: number | null; nik?: string }>
-  const processMembersFromFallback = (processTeamMembersOnlyData?.data as unknown as Array<{ id: number; name?: string; user_id?: number | null; nik?: string }>) ?? []
-  const processDialogTeamMembers = processMembersFromDetail.length > 0 ? processMembersFromDetail : processMembersFromFallback
-  const processDialogTeamMembersLoading = processTeamDetailLoading
+  const processDialogTeamMembers = getTeamMembers(processDialogTeamId)
+  const processDialogTeamMembersLoading = false
 
   // Check ticket status - also handle null/missing stage as Draft (new tickets)
   const stageName = ticket.stage?.name?.toLowerCase() || ""
@@ -340,9 +328,9 @@ export function TicketAdminActions({ ticket, canModify, isTicketOwner = false }:
 
   const handleOpenTicket = () => {
     if (canModify) {
-      // Reset dialog state
-      setProcessDialogTeam("")
-      setProcessDialogMember("")
+      // Pre-fill dialog with current sidebar selections (or auto-selected values)
+      setProcessDialogTeam(selectedTeam || (teams.length === 1 ? teams[0].id.toString() : ""))
+      setProcessDialogMember(selectedMember || "")
       setShowProcessDialog(true)
     }
   }
@@ -646,7 +634,7 @@ export function TicketAdminActions({ ticket, canModify, isTicketOwner = false }:
                   <SelectContent>
                     {teamMembers.length > 0 ? (
                       teamMembers.map((member) => (
-                        <SelectItem key={member.id} value={member.id.toString()}>
+                        <SelectItem key={member.employee_id || member.id} value={(member.employee_id || member.id).toString()}>
                           <span className="flex items-center gap-2">
                             <User className="h-3 w-3" />
                             {member.name}
@@ -894,7 +882,7 @@ export function TicketAdminActions({ ticket, canModify, isTicketOwner = false }:
                 <SelectContent>
                   {processDialogTeamMembers.length > 0 ? (
                     processDialogTeamMembers.map((member) => (
-                      <SelectItem key={member.id} value={member.id.toString()}>
+                      <SelectItem key={member.employee_id || member.id} value={(member.employee_id || member.id).toString()}>
                         <span className="flex items-center gap-2">
                           <User className="h-3 w-3" />
                           {member.name}

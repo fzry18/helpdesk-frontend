@@ -109,11 +109,11 @@ export function TicketHeader({ ticket }: TicketHeaderProps) {
                   }
                 </p>
                 {durationDays !== null && (
-                  <p className="text-xs font-medium text-green-700 mt-2">
+                  <span className="block text-xs font-medium text-green-700 mt-2">
                     <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
                       Diselesaikan dalam {durationDays} {durationDays === 1 ? "hari" : "hari"}
                     </Badge>
-                  </p>
+                  </span>
                 )}
               </div>
             </div>

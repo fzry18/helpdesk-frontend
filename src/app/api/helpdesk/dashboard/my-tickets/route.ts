@@ -17,13 +17,14 @@ export async function GET(request: NextRequest) {
     ],
   }
 
-  const [total, open, inProgress, closed, tickets] = await Promise.all([
+  const [total, open, inProgress, closed, rejected, tickets] = await Promise.all([
     prisma.ticket.count({ where }),
     prisma.ticket.count({ where: { ...where, status: "OPEN" } }),
     prisma.ticket.count({ where: { ...where, status: "IN_PROGRESS" } }),
     prisma.ticket.count({
       where: { ...where, status: { in: ["RESOLVED", "CLOSED"] } },
     }),
+    prisma.ticket.count({ where: { ...where, status: "REJECTED" } }),
     prisma.ticket.findMany({
       where,
       include: TICKET_INCLUDES,
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
   return Response.json({
     success: true,
     data: {
-      stats: { total, open, in_progress: inProgress, closed },
+      stats: { total, open, in_progress: inProgress, closed, rejected },
       tickets: tickets.map(formatTicketResponse),
     },
   })

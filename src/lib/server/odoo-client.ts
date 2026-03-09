@@ -39,8 +39,9 @@ export interface OdooLoginResponse {
 export interface OdooEmployeeData {
   id: number
   nik: string
-  name: string
+  name?: string | null
   display_name: string
+  fal_firstname_lastname?: string | null
   email?: string | null
   work_email?: string | null
   mobile_phone?: string | null
@@ -61,6 +62,31 @@ export interface OdooEmployeeData {
   marital?: string | null
   identification_id?: string | null
   religion?: string | null
+}
+
+/**
+ * Parse employee name from Odoo response.
+ * Odoo returns display_name as "NIK - Name" or just "Name".
+ * Falls back to fal_firstname_lastname, then name, then display_name.
+ */
+export function parseOdooEmployeeName(emp: OdooEmployeeData): string {
+  // Try name field first (sometimes available)
+  if (emp.name && typeof emp.name === "string" && emp.name.trim()) {
+    return emp.name.trim()
+  }
+  // Try fal_firstname_lastname
+  if (emp.fal_firstname_lastname && typeof emp.fal_firstname_lastname === "string" && emp.fal_firstname_lastname.trim()) {
+    return emp.fal_firstname_lastname.trim()
+  }
+  // Parse from display_name: "NIK - Name" or just "Name"
+  if (emp.display_name) {
+    const parts = emp.display_name.split(" - ")
+    if (parts.length >= 2) {
+      return parts.slice(1).join(" - ").trim()
+    }
+    return emp.display_name.trim()
+  }
+  return ""
 }
 
 export interface OdooGetMeResponse {
@@ -121,17 +147,65 @@ export async function odooEmployeeLogin(
 }
 
 /**
- * Search employees by name
+ * Search employees by name.
+ * Odoo's f_name filter does NOT work, so we fetch all employees (paginated)
+ * and filter server-side by display_name.
+ * Results are cached for 5 minutes to avoid repeated full fetches.
  */
+let _employeeCache: { data: OdooEmployeeData[]; timestamp: number } | null = null
+const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+async function getAllEmployees(token?: string): Promise<OdooEmployeeData[]> {
+  if (_employeeCache && Date.now() - _employeeCache.timestamp < CACHE_TTL) {
+    return _employeeCache.data
+  }
+
+  // Fetch first page to get total
+  const first = await fetchWithTimeout(
+    `${ODOO_API_BASE}/employee?limit=1000&offset=0`,
+    { headers: odooHeaders(token) }
+  )
+  const firstRes: OdooEmployeeListResponse = await first.json()
+  if (!firstRes.success || !firstRes.data) return []
+
+  const total = firstRes.meta.total
+  const allData: OdooEmployeeData[] = [...firstRes.data]
+
+  // Fetch remaining pages
+  const remaining = Math.ceil((total - 1000) / 1000)
+  for (let i = 1; i <= remaining; i++) {
+    const page = await fetchWithTimeout(
+      `${ODOO_API_BASE}/employee?limit=1000&offset=${i * 1000}`,
+      { headers: odooHeaders(token) }
+    )
+    const pageRes: OdooEmployeeListResponse = await page.json()
+    if (pageRes.success && pageRes.data) {
+      allData.push(...pageRes.data)
+    }
+  }
+
+  _employeeCache = { data: allData, timestamp: Date.now() }
+  return allData
+}
+
 export async function odooSearchEmployeeByName(
   name: string,
   token?: string
 ): Promise<OdooEmployeeListResponse> {
-  const res = await fetchWithTimeout(
-    `${ODOO_API_BASE}/employee?f_name=${encodeURIComponent(name)}`,
-    { headers: odooHeaders(token) }
-  )
-  return res.json()
+  const all = await getAllEmployees(token)
+  const q = name.toLowerCase()
+  const filtered = all.filter((emp) => {
+    const empName = parseOdooEmployeeName(emp).toLowerCase()
+    const displayName = (emp.display_name || "").toLowerCase()
+    return empName.includes(q) || displayName.includes(q)
+  })
+
+  return {
+    success: true,
+    message: "OK",
+    meta: { count: filtered.length, total: filtered.length, limit: filtered.length, offset: 0 },
+    data: filtered.slice(0, 50), // Limit to 50 results
+  }
 }
 
 /**
@@ -223,5 +297,31 @@ export async function odooChangePassword(
     body: body.toString(),
   })
 
+  return res.json()
+}
+
+export interface OdooDepartmentData {
+  id: number
+  name: string
+  code?: string | null
+  total_employee: number
+}
+
+export interface OdooDepartmentListResponse {
+  message: string
+  meta: { count: number; total: number; limit: number; offset: number }
+  data: OdooDepartmentData[] | null
+  success: boolean
+}
+
+/**
+ * Get all departments from Odoo
+ */
+export async function odooGetDepartments(
+  token?: string
+): Promise<OdooDepartmentListResponse> {
+  const res = await fetchWithTimeout(`${ODOO_API_BASE}/hr-department`, {
+    headers: odooHeaders(token),
+  })
   return res.json()
 }

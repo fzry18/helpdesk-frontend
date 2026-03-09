@@ -11,6 +11,7 @@ import {
   Menu,
   X,
   ShieldCheck,
+  Users,
 } from "lucide-react"
 import { useAuthStore } from "@/store/authStore"
 import { useRouter } from "next/navigation"
@@ -36,6 +37,11 @@ const adminMenuItems = [
     title: "Kelola Admin",
     href: "/admin/employees",
     icon: ShieldCheck,
+  },
+  {
+    title: "Kelola Tim",
+    href: "/admin/teams",
+    icon: Users,
   },
 ]
 

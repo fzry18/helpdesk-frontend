@@ -521,3 +521,73 @@ export const adminAPI = {
   setRole: (data: { nik: string; role: "DEPT_ADMIN" | "USER" }) =>
     apiClient.post<ApiResponse<AdminEmployee>>("/admin/employees/role", data),
 }
+
+// ============================================
+// 👥 ADMIN TEAM API (Super Admin only)
+// ============================================
+interface OdooDepartment {
+  id: number
+  name: string
+  code: string | null
+  total_employee: number
+  team_count: number
+}
+
+interface AdminTeam {
+  id: number
+  name: string
+  description: string | null
+  department_id: number | null
+  department_name: string | null
+  is_active: boolean
+  member_count: number
+  members: Array<{
+    id: number
+    employee_id: number
+    name: string
+    nik: string
+    email: string | null
+    phone: string | null
+    department: string | null
+    department_id: number | null
+    job_title: string | null
+  }>
+  created_at?: string
+}
+
+export const adminTeamAPI = {
+  /** Get Odoo departments for team creation */
+  getDepartments: () =>
+    apiClient.get<ApiResponse<OdooDepartment[]>>("/admin/teams/departments"),
+
+  /** List all teams (admin view with all details) */
+  getTeams: (params?: { search?: string; department_id?: number; show_inactive?: boolean }) =>
+    apiClient.get<ApiResponse<AdminTeam[]>>("/admin/teams", { params }),
+
+  /** Create a new team */
+  createTeam: (data: { name: string; department_id?: number; department_name?: string; description?: string }) =>
+    apiClient.post<ApiResponse<AdminTeam>>("/admin/teams", data),
+
+  /** Update team */
+  updateTeam: (id: number, data: { name?: string; description?: string; is_active?: boolean }) =>
+    apiClient.patch<ApiResponse<AdminTeam>>(`/admin/teams/${id}`, data),
+
+  /** Soft-delete (deactivate) team */
+  deleteTeam: (id: number) =>
+    apiClient.delete<ApiResponse<null>>(`/admin/teams/${id}`),
+
+  /** Add member to team by NIK */
+  addMember: (teamId: number, nik: string) =>
+    apiClient.post<ApiResponse<AdminTeam["members"][0]>>(`/admin/teams/${teamId}/members`, { nik }),
+
+  /** Remove member from team */
+  removeMember: (teamId: number, memberId: number) =>
+    apiClient.delete<ApiResponse<null>>(`/admin/teams/${teamId}/members`, { data: { member_id: memberId } }),
+
+  /** Search Odoo employees (reuses admin endpoint) */
+  searchEmployees: (query: string) =>
+    apiClient.get<ApiResponse<OdooEmployeeSearchResult[]>>(
+      "/admin/employees/search",
+      { params: { q: query } }
+    ),
+}

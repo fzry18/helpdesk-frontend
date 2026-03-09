@@ -5,7 +5,7 @@
 import { NextRequest } from "next/server"
 import { prisma } from "@/lib/server/prisma"
 import { getAuthEmployee, authError, isSuperAdmin, getSessionOdooToken } from "@/lib/server/auth"
-import { odooFindEmployeeByNik } from "@/lib/server/odoo-client"
+import { odooFindEmployeeByNik, parseOdooEmployeeName } from "@/lib/server/odoo-client"
 
 export async function POST(request: NextRequest) {
   const employee = await getAuthEmployee(request)
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
       targetEmployee = await prisma.employee.create({
         data: {
           nik: emp.nik,
-          name: emp.name,
+          name: parseOdooEmployeeName(emp),
           odooEmployeeId: emp.id,
           department: emp.department_id?.[1] || "",
           departmentId: emp.department_id?.[0] || null,
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
           updateData.department = emp.department_id?.[1] || ""
           updateData.departmentId = emp.department_id?.[0] || null
           updateData.jobTitle = emp.job_id?.[1] || ""
-          updateData.name = emp.name
+          updateData.name = parseOdooEmployeeName(emp)
           updateData.email = emp.work_email || emp.email || ""
           updateData.phone = emp.mobile_phone || emp.phone_contact || ""
           updateData.operatingUnit = emp.operating_unit?.[1] || ""

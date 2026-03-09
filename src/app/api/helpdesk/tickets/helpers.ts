@@ -66,6 +66,22 @@ export function parsePriority(val: string | undefined | null): TicketPriority {
 }
 
 /**
+ * Derive a virtual stage from ticket status when stages table is empty / stage_id is NULL.
+ */
+function deriveStageFromStatus(status: TicketStatus, isRejected?: boolean | null): { id: number; name: string } {
+  if (isRejected) return { id: 0, name: "Rejected" }
+  switch (status) {
+    case "OPEN": return { id: 0, name: "Sent" }
+    case "IN_PROGRESS": return { id: 0, name: "In Progress" }
+    case "WAITING_CONFIRMATION": return { id: 0, name: "Waiting Confirmation" }
+    case "RESOLVED": return { id: 0, name: "Resolved" }
+    case "CLOSED": return { id: 0, name: "Closed" }
+    case "REJECTED": return { id: 0, name: "Rejected" }
+    default: return { id: 0, name: "Sent" }
+  }
+}
+
+/**
  * Format ticket for API response (matching frontend Ticket type)
  */
 export function formatTicketResponse(ticket: PrismaTicket & {
@@ -81,6 +97,11 @@ export function formatTicketResponse(ticket: PrismaTicket & {
   }> | null
   messages?: Array<unknown> | null
 }) {
+  // Use DB stage if available, otherwise derive from status
+  const stage = ticket.stage
+    ? { id: ticket.stage.id, name: ticket.stage.name }
+    : deriveStageFromStatus(ticket.status, ticket.isRejected)
+
   return {
     id: ticket.id,
     ticket_number: ticket.ticketNumber,
@@ -95,9 +116,7 @@ export function formatTicketResponse(ticket: PrismaTicket & {
     is_rejected: ticket.isRejected,
     rejection_reason: ticket.rejectionReason,
     rejected_date: ticket.rejectedDate?.toISOString() || null,
-    stage: ticket.stage
-      ? { id: ticket.stage.id, name: ticket.stage.name }
-      : null,
+    stage,
     team: ticket.team
       ? { id: ticket.team.id, name: ticket.team.name }
       : null,
@@ -105,7 +124,7 @@ export function formatTicketResponse(ticket: PrismaTicket & {
       ? { id: ticket.category.id, name: ticket.category.name }
       : null,
     stage_id: ticket.stageId,
-    stage_name: ticket.stage?.name || null,
+    stage_name: stage.name,
     team_id: ticket.teamId,
     team_name: ticket.team?.name || null,
     category_id: ticket.categoryId,
@@ -175,12 +194,15 @@ export const TICKET_INCLUDES = {
 export function mapStatusFilter(status: string | undefined): TicketStatus[] | undefined {
   if (!status || status === "all") return undefined
   switch (status) {
+    case "draft":
     case "open":
-      return ["OPEN", "IN_PROGRESS"]
+      return ["OPEN"]
     case "in_progress":
       return ["IN_PROGRESS"]
     case "closed":
       return ["RESOLVED", "CLOSED"]
+    case "rejected":
+      return ["REJECTED"]
     default:
       return undefined
   }
