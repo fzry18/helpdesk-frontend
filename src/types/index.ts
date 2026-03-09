@@ -1,9 +1,8 @@
-// Employee - Primary authentication entity (employee-only auth)
+// Employee - Primary authentication entity (Odoo employee + local role)
 export interface Employee {
   id: number
   name: string
   nik: string
-  helpdesk_username: string
   department_id: number | null
   department: string
   job_title: string
@@ -11,12 +10,11 @@ export interface Employee {
   phone: string
   is_manager?: boolean
   helpdesk_role?: 'user' | 'dept_admin' | 'super_admin'
-  user_type?: 'odoo_user' | 'nik_only'
-  has_odoo_account?: boolean
+  operating_unit?: string
 }
 
 export interface LoginRequest {
-  login: string  // 4 digit terakhir NIK
+  nik: string
   password: string
 }
 
@@ -25,7 +23,7 @@ export interface LoginResponse {
   data: {
     access_token: string
     token_type: string
-    expires_in: number
+    expires_at: string
     employee: Employee
   }
 }

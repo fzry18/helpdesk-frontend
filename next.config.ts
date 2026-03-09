@@ -96,14 +96,9 @@ const nextConfig: NextConfig = {
     return config
   },
 
-  // API rewrites
+  // API rewrites - no longer needed as API routes are handled by Next.js directly
   async rewrites() {
-    return [
-      {
-        source: "/api/:path*",
-        destination: "http://localhost:8072/api/:path*",
-      },
-    ]
+    return []
   },
 
   // Aggressive headers untuk performance
@@ -126,7 +121,7 @@ const nextConfig: NextConfig = {
           },
           {
             key: 'Content-Security-Policy',
-            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http://localhost:8072; font-src 'self'; connect-src 'self' http://localhost:8072 ws://localhost:8072; frame-ancestors 'none'",
+            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'",
           },
           {
             key: 'Referrer-Policy',

@@ -64,6 +64,14 @@ export const authAPI = {
       old_password: oldPassword,
       new_password: newPassword,
     }),
+
+  /** Change default password (no auth required, used on first login) */
+  forceChangePassword: (nik: string, oldPassword: string, newPassword: string) =>
+    apiClient.post("/auth/force-change-password", {
+      nik,
+      old_password: oldPassword,
+      new_password: newPassword,
+    }),
 }
 
 // ============================================
@@ -464,4 +472,52 @@ export const dashboardAPI = {
     apiClient.get<ApiResponse<TeamPerformance>>("/dashboard/team-performance", {
       params: { team_id: teamId },
     }),
+}
+
+// ============================================
+// 🛡️ ADMIN API (Super Admin only)
+// ============================================
+interface AdminEmployee {
+  id: number
+  nik: string
+  name: string
+  department: string
+  department_id: number | null
+  job_title: string
+  email: string
+  phone: string
+  helpdesk_role: string
+  operating_unit: string
+  is_active: boolean
+  last_login_at: string | null
+}
+
+interface OdooEmployeeSearchResult {
+  odoo_id: number
+  nik: string
+  name: string
+  department: string
+  department_id: number | null
+  job_title: string
+  email: string
+  phone: string
+  operating_unit: string
+  helpdesk_role: string
+}
+
+export const adminAPI = {
+  /** Get list of employees with admin roles */
+  getAdmins: (params?: { search?: string; department?: string }) =>
+    apiClient.get<ApiResponse<AdminEmployee[]>>("/admin/employees", { params }),
+
+  /** Search Odoo employees (for Add Admin dialog) */
+  searchEmployees: (query: string) =>
+    apiClient.get<ApiResponse<OdooEmployeeSearchResult[]>>(
+      "/admin/employees/search",
+      { params: { q: query } }
+    ),
+
+  /** Set employee helpdesk role */
+  setRole: (data: { nik: string; role: "DEPT_ADMIN" | "USER" }) =>
+    apiClient.post<ApiResponse<AdminEmployee>>("/admin/employees/role", data),
 }

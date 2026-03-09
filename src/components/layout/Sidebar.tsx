@@ -10,6 +10,7 @@ import {
   User,
   Menu,
   X,
+  ShieldCheck,
 } from "lucide-react"
 import { useAuthStore } from "@/store/authStore"
 import { useRouter } from "next/navigation"
@@ -30,9 +31,17 @@ const menuItems = [
   },
 ]
 
+const adminMenuItems = [
+  {
+    title: "Kelola Admin",
+    href: "/admin/employees",
+    icon: ShieldCheck,
+  },
+]
+
 export function Sidebar() {
   const pathname = usePathname()
-  const { employee, logout, getDepartment, getJobTitle, hasOdooAccount } = useAuthStore()
+  const { employee, logout, getDepartment, getJobTitle } = useAuthStore()
   const router = useRouter()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
@@ -45,6 +54,7 @@ export function Sidebar() {
   const displayName = employee?.name || 'User'
   const displayDepartment = getDepartment()
   const displayJobTitle = getJobTitle()
+  const showAdminMenu = employee?.helpdesk_role === 'super_admin'
 
   const handleLogout = () => {
     logout()
@@ -91,6 +101,36 @@ export function Sidebar() {
               </Link>
             )
           })}
+
+          {/* Admin menu - Super Admin only */}
+          {showAdminMenu && (
+            <>
+              <div className="my-3 border-t" />
+              <p className="px-3 pb-1 text-xs font-semibold uppercase text-muted-foreground tracking-wider">
+                Admin
+              </p>
+              {adminMenuItems.map((item) => {
+                const Icon = item.icon
+                const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                      isActive
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    )}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <Icon className="h-5 w-5" />
+                    {item.title}
+                  </Link>
+                )
+              })}
+            </>
+          )}
         </nav>
       </div>
 
@@ -102,17 +142,15 @@ export function Sidebar() {
           <div className="flex-1 overflow-hidden">
             <p className="truncate text-sm font-medium">{displayName}</p>
             <p className="truncate text-xs text-muted-foreground">
-              {displayDepartment || displayJobTitle || `NIK: ...${employee?.helpdesk_username || ''}`}
+              {displayDepartment || displayJobTitle || `NIK: ${employee?.nik || ''}`}
             </p>
             <span
               className={cn(
                 "mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-medium",
-                hasOdooAccount()
-                  ? "bg-primary/15 text-primary"
-                  : "bg-muted text-muted-foreground"
+                "bg-primary/15 text-primary"
               )}
             >
-              {hasOdooAccount() ? "Odoo + Helpdesk" : "Helpdesk Only"}
+              {employee?.helpdesk_role === 'super_admin' ? 'Super Admin' : employee?.helpdesk_role === 'dept_admin' ? 'Dept Admin' : 'User'}
             </span>
           </div>
         </div>

@@ -1,0 +1,302 @@
+// Helpdesk System - Prisma Schema
+// All business logic stored in local PostgreSQL
+// Authentication via Odoo Employee API (external)
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================
+// 👤 EMPLOYEE & AUTH
+// ============================================
+
+model Employee {
+  id              Int       @id @default(autoincrement())
+  odooEmployeeId  Int       @unique @map("odoo_employee_id")
+  nik             String    @unique
+  name            String
+  email           String?
+  phone           String?
+  department      String?
+  departmentId    Int?      @map("department_id")
+  jobTitle        String?   @map("job_title")
+  operatingUnit   String?   @map("operating_unit")
+  gender          String?
+  isManager       Boolean   @default(false) @map("is_manager")
+  isActive        Boolean   @default(true) @map("is_active")
+  helpdeskRole    HelpdeskRole @default(USER) @map("helpdesk_role")
+  lastLoginAt     DateTime? @map("last_login_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  createdTickets     Ticket[]          @relation("TicketCreator")
+  assignedTickets    Ticket[]          @relation("TicketAssignee")
+  messages           TicketMessage[]
+  teamMemberships    TeamMember[]
+  activityLogs       ActivityLog[]
+
+  @@map("employees")
+}
+
+enum HelpdeskRole {
+  USER
+  DEPT_ADMIN
+  SUPER_ADMIN
+
+  @@map("helpdesk_role")
+}
+
+model Session {
+  id          String   @id @default(cuid())
+  employeeId  Int      @map("employee_id")
+  token       String   @unique
+  odooToken   String?  @map("odoo_token")
+  expiresAt   DateTime @map("expires_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([token])
+  @@index([employeeId])
+  @@map("sessions")
+}
+
+// ============================================
+// 🎫 TICKETS
+// ============================================
+
+model Ticket {
+  id              Int       @id @default(autoincrement())
+  ticketNumber    String    @unique @map("ticket_number")
+  subject         String
+  description     String    @db.Text
+  priority        TicketPriority @default(NORMAL)
+  status          TicketStatus   @default(OPEN)
+
+  // Category
+  ticketCategoryType  TicketCategoryType? @map("ticket_category_type")
+  systemCategory      String?             @map("system_category")
+
+  // Relations IDs
+  createdById     Int       @map("created_by_id")
+  assignedToId    Int?      @map("assigned_to_id")
+  categoryId      Int?      @map("category_id")
+  teamId          Int?      @map("team_id")
+  stageId         Int?      @map("stage_id")
+  departmentId    Int?      @map("department_id")
+
+  // Department info (denormalized for performance)
+  departmentName  String?   @map("department_name")
+
+  // Workflow fields
+  waitingUserConfirmation   Boolean   @default(false) @map("waiting_user_confirmation")
+  resolutionConfirmed       Boolean   @default(false) @map("resolution_confirmed")
+  isRejected                Boolean   @default(false) @map("is_rejected")
+  rejectionReason           String?   @map("rejection_reason") @db.Text
+  rejectedDate              DateTime? @map("rejected_date")
+  userConfirmationRequestDate DateTime? @map("user_confirmation_request_date")
+  confirmationDate          DateTime? @map("confirmation_date")
+
+  // Timestamps
+  startDate       DateTime? @map("start_date")
+  endDate         DateTime? @map("end_date")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  createdBy       Employee  @relation("TicketCreator", fields: [createdById], references: [id])
+  assignedTo      Employee? @relation("TicketAssignee", fields: [assignedToId], references: [id])
+  category        Category? @relation(fields: [categoryId], references: [id])
+  team            Team?     @relation(fields: [teamId], references: [id])
+  stage           Stage?    @relation(fields: [stageId], references: [id])
+  messages        TicketMessage[]
+  attachments     Attachment[]
+  tags            TicketTag[]
+  activityLogs    ActivityLog[]
+
+  @@index([status])
+  @@index([createdById])
+  @@index([assignedToId])
+  @@index([teamId])
+  @@index([categoryId])
+  @@index([stageId])
+  @@index([createdAt])
+  @@map("tickets")
+}
+
+enum TicketPriority {
+  VERY_LOW
+  LOW
+  NORMAL
+  HIGH
+  VERY_HIGH
+
+  @@map("ticket_priority")
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_CONFIRMATION
+  RESOLVED
+  CLOSED
+  REJECTED
+
+  @@map("ticket_status")
+}
+
+enum TicketCategoryType {
+  HELPER
+  SYSTEM
+
+  @@map("ticket_category_type")
+}
+
+// ============================================
+// 💬 MESSAGES
+// ============================================
+
+model TicketMessage {
+  id          Int       @id @default(autoincrement())
+  ticketId    Int       @map("ticket_id")
+  authorId    Int       @map("author_id")
+  body        String    @db.Text
+  bodyPlain   String?   @map("body_plain") @db.Text
+  messageType String    @default("comment") @map("message_type")
+  isInternal  Boolean   @default(false) @map("is_internal")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  ticket      Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author      Employee  @relation(fields: [authorId], references: [id])
+
+  @@index([ticketId])
+  @@index([authorId])
+  @@map("ticket_messages")
+}
+
+// ============================================
+// 📎 ATTACHMENTS
+// ============================================
+
+model Attachment {
+  id          Int       @id @default(autoincrement())
+  ticketId    Int       @map("ticket_id")
+  name        String
+  filename    String
+  mimetype    String
+  fileSize    Int       @map("file_size")
+  filePath    String    @map("file_path")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  ticket      Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@map("attachments")
+}
+
+// ============================================
+// 📊 MASTER DATA
+// ============================================
+
+model Category {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  sequence    Int       @default(0)
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  tickets     Ticket[]
+
+  @@map("categories")
+}
+
+model Team {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  description String?
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  tickets     Ticket[]
+  members     TeamMember[]
+
+  @@map("teams")
+}
+
+model TeamMember {
+  id          Int       @id @default(autoincrement())
+  teamId      Int       @map("team_id")
+  employeeId  Int       @map("employee_id")
+  isLeader    Boolean   @default(false) @map("is_leader")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  team        Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  employee    Employee  @relation(fields: [employeeId], references: [id])
+
+  @@unique([teamId, employeeId])
+  @@map("team_members")
+}
+
+model Stage {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  sequence    Int       @default(0)
+  isStarting  Boolean   @default(false) @map("is_starting")
+  isClosing   Boolean   @default(false) @map("is_closing")
+  fold        Boolean   @default(false)
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  tickets     Ticket[]
+
+  @@map("stages")
+}
+
+model Tag {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  color       Int       @default(0)
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  tickets     TicketTag[]
+
+  @@map("tags")
+}
+
+model TicketTag {
+  ticketId    Int       @map("ticket_id")
+  tagId       Int       @map("tag_id")
+
+  ticket      Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  tag         Tag       @relation(fields: [tagId], references: [id])
+
+  @@id([ticketId, tagId])
+  @@map("ticket_tags")
+}
+
+// ============================================
+// 📝 ACTIVITY LOGS
+// ============================================
+
+model ActivityLog {
+  id            Int       @id @default(autoincrement())
+  ticketId      Int       @map("ticket_id")
+  employeeId    Int       @map("employee_id")
+  activityType  String    @map("activity_type") // progress, note, update, status_change, assignment
+  content       String    @db.Text
+  metadata      Json?     // Extra data (old_status, new_status, etc.)
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  ticket        Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  employee      Employee  @relation(fields: [employeeId], references: [id])
+
+  @@index([ticketId])
+  @@map("activity_logs")
+}

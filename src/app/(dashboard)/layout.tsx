@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { useAuthStore } from "@/store/authStore"
 import { Sidebar } from "@/components/layout/Sidebar"
 import { Navbar } from "@/components/layout/Navbar"
 import { authAPI } from "@/lib/api/endpoints"
+import { useToast } from "@/hooks/use-toast"
 
 export default function DashboardLayout({
   children,
@@ -13,32 +14,41 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const router = useRouter()
-  const { isAuthenticated } = useAuthStore()
+  const { isAuthenticated, logout } = useAuthStore()
   const [isHydrated, setIsHydrated] = useState(false)
   const [hasToken, setHasToken] = useState(false)
+  const { toast } = useToast()
 
-  // Check hydration dan localStorage
+  const handleSessionExpired = useCallback(() => {
+    logout()
+    toast({
+      title: "Sesi berakhir",
+      description: "Sesi login Anda telah habis. Silakan login kembali.",
+      variant: "destructive",
+    })
+    router.push("/login")
+  }, [logout, toast, router])
+
   useEffect(() => {
-    // Cek localStorage langsung untuk token
     const token = localStorage.getItem("access_token")
     setHasToken(!!token)
     setIsHydrated(true)
-
-    console.log('=== Layout Auth Check ===')
-    console.log('isAuthenticated (store):', isAuthenticated)
-    console.log('hasToken (localStorage):', !!token)
-    console.log('isHydrated:', true)
   }, [isAuthenticated])
 
-  // Redirect hanya setelah hydrated DAN tidak ada token
   useEffect(() => {
     if (isHydrated && !isAuthenticated && !hasToken) {
-      console.log('No auth - redirecting to login')
       router.push("/login")
     }
   }, [isHydrated, isAuthenticated, hasToken, router])
 
-  // Re-validate role dari server saat halaman dashboard di-load (cegah manipulasi role di localStorage)
+  // Listen for auth-error events dispatched by axios interceptor on 401
+  useEffect(() => {
+    const onAuthError = () => handleSessionExpired()
+    window.addEventListener("auth-error", onAuthError)
+    return () => window.removeEventListener("auth-error", onAuthError)
+  }, [handleSessionExpired])
+
+  // Re-validate session from server on load
   useEffect(() => {
     if (!isHydrated || !hasToken || typeof window === "undefined") return
     const token = localStorage.getItem("access_token") ?? useAuthStore.getState().accessToken
@@ -52,9 +62,10 @@ export default function DashboardLayout({
         }
       })
       .catch(() => {
-        // Token invalid / expired — biarkan redirect handled by existing auth check
+        // Token invalid / expired → force logout
+        handleSessionExpired()
       })
-  }, [isHydrated, hasToken])
+  }, [isHydrated, hasToken, handleSessionExpired])
 
   // Loading state saat belum hydrated
   if (!isHydrated) {

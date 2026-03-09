@@ -18,26 +18,14 @@ interface AuthActions {
   }) => void
   setLoading: (loading: boolean) => void
   logout: () => void
-  // Helper untuk mendapatkan display name
   getDisplayName: () => string
-  // Helper untuk mendapatkan NIK
   getDisplayIdentifier: () => string
-  // Helper untuk mendapatkan department
   getDepartment: () => string
-  // Helper untuk mendapatkan job title
   getJobTitle: () => string
-  // Helper untuk cek apakah manager
   isManager: () => boolean
-  // Helper untuk mendapatkan helpdesk role
   getHelpdeskRole: () => 'user' | 'dept_admin' | 'super_admin'
-  // Helper untuk cek apakah admin (dept_admin atau super_admin)
   isAdmin: () => boolean
-  // Helper untuk cek apakah super admin
   isSuperAdmin: () => boolean
-  // Helper untuk user type dari login response
-  getUserType: () => 'odoo_user' | 'nik_only'
-  // Helper untuk cek punya akun Odoo
-  hasOdooAccount: () => boolean
 }
 
 type AuthStore = AuthState & AuthActions
@@ -102,9 +90,6 @@ export const useAuthStore = create<AuthStore>()(
       },
       getDisplayIdentifier: () => {
         const state = get()
-        if (state.employee?.helpdesk_username) {
-          return `NIK: ...${state.employee.helpdesk_username}`
-        }
         return state.employee?.nik || ''
       },
       getDepartment: () => {
@@ -131,14 +116,6 @@ export const useAuthStore = create<AuthStore>()(
       isSuperAdmin: () => {
         const state = get()
         return state.employee?.helpdesk_role === 'super_admin'
-      },
-      getUserType: () => {
-        const state = get()
-        return state.employee?.user_type || 'nik_only'
-      },
-      hasOdooAccount: () => {
-        const state = get()
-        return state.employee?.has_odoo_account ?? false
       },
     })),
     {

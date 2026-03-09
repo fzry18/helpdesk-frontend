@@ -32,8 +32,8 @@ function isTicketDraft(ticket: Ticket): boolean {
 export default function TicketsPage() {
   const helpdeskRole = useAuthStore((s) => s.getHelpdeskRole())
   const searchParams = useSearchParams()
-  const urlStatus = searchParams.get("status")
-  const createdToday = searchParams.get("created_today")
+  const urlStatus = searchParams?.get("status") ?? null
+  const createdToday = searchParams?.get("created_today") ?? null
   
   // Detect filtered view mode
   const isFilteredView = !!(urlStatus || createdToday)

@@ -69,7 +69,7 @@ export function AttachmentList({
 
     // Gunakan URL relatif agar melewati Next.js proxy
     // Path dari backend: /api/helpdesk/attachments/{id}/content
-    // Next.js proxy akan forward ke http://localhost:8072/api/helpdesk/attachments/{id}/content
+    // Path will be served by local Next.js API routes
     return path
   }
 
