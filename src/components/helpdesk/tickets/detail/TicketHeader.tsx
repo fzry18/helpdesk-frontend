@@ -12,6 +12,7 @@ import {
   getSystemLabel,
   getSystemBadgeStyle,
 } from "@/lib/utils/ticket-helpers"
+import { useAuthStore } from "@/store/authStore"
 import type { Ticket } from "@/types"
 
 interface TicketHeaderProps {
@@ -19,9 +20,10 @@ interface TicketHeaderProps {
 }
 
 export function TicketHeader({ ticket }: TicketHeaderProps) {
+  const isAdmin = useAuthStore((s) => s.isAdmin)
   const getDisplayStageNameWithRejection = (): string => {
     if (ticket.is_rejected) return "Ditolak"
-    return getDisplayStageName(ticket)
+    return getDisplayStageName(ticket, isAdmin())
   }
   const priorityConfig = getPriorityConfig(String(ticket.priority))
   const stageName = getDisplayStageNameWithRejection()

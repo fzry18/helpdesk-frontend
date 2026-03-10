@@ -111,21 +111,28 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     )
   }
 
+  // Check if any tickets are assigned to this team
+  const ticketCount = await prisma.ticket.count({ where: { teamId } })
+  if (ticketCount > 0) {
+    return Response.json(
+      { success: false, message: `Tidak dapat menghapus tim "${team.name}" karena masih memiliki ${ticketCount} ticket. Nonaktifkan saja.`, data: null },
+      { status: 409 }
+    )
+  }
+
   try {
-    // Soft delete
-    await prisma.team.update({
-      where: { id: teamId },
-      data: { isActive: false },
-    })
+    // Hard delete — only allowed when no tickets reference this team
+    await prisma.teamMember.deleteMany({ where: { teamId } })
+    await prisma.team.delete({ where: { id: teamId } })
 
     return Response.json({
       success: true,
-      message: `Tim "${team.name}" berhasil dinonaktifkan`,
+      message: `Tim "${team.name}" berhasil dihapus`,
     })
   } catch (error) {
     console.error("Delete team error:", error)
     return Response.json(
-      { success: false, message: "Gagal menonaktifkan tim", data: null },
+      { success: false, message: "Gagal menghapus tim", data: null },
       { status: 500 }
     )
   }

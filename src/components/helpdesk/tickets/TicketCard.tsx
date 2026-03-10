@@ -11,6 +11,7 @@ import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { useInView } from 'react-intersection-observer'
 import { usePrefetchTicket } from "@/hooks/use-ticket-queries"
+import { useAuthStore } from "@/store/authStore"
 
 interface TicketCardProps {
   ticket: Ticket
@@ -143,10 +144,10 @@ const TicketCardComponent = ({ ticket, index = 0 }: TicketCardProps) => {
     prefetchTicket(ticket.id)
   }, [prefetchTicket, ticket.id])
 
+  const isAdmin = useAuthStore((s) => s.isAdmin)
   const priorityConfig = getPriorityConfig(ticket.priority)
   
   // Get stage name - handle all possible cases
-  // Backend should return stage.name = "Sent" for users when stage is Draft or missing
   const stageName = (() => {
     // Check stage object first
     if (ticket.stage && typeof ticket.stage === "object" && ticket.stage.name) {
@@ -160,8 +161,8 @@ const TicketCardComponent = ({ ticket, index = 0 }: TicketCardProps) => {
     if (typeof ticket.stage === "string" && ticket.stage) {
       return ticket.stage
     }
-    // Final fallback - "Sent" for user-created tickets
-    return "Sent"
+    // Fallback based on role: admin sees "Draft", user sees "Sent"
+    return isAdmin() ? "Draft" : "Sent"
   })()
   
   // Override stage name if rejected

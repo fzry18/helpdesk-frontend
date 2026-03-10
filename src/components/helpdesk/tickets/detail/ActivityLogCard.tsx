@@ -100,16 +100,7 @@ export function ActivityLogCard({
                             {content || messageToPlainText(bodyRaw) || "—"}
                           </p>
                         )}
-                        {label === "Team Assignment" &&
-                          (ticket.assigned_employee?.name ?? ticket.assigned_user?.name) && (
-                            <p className="text-sm text-green-600 mt-1 flex items-center gap-1">
-                              <span>👤</span> Ditangani:{" "}
-                              <strong>
-                                {ticket.assigned_employee?.name ??
-                                  ticket.assigned_user?.name}
-                              </strong>
-                            </p>
-                          )}
+
                       </div>
                     </div>
                   </div>

@@ -184,7 +184,12 @@ export function TicketAdminActions({ ticket, canModify, isTicketOwner = false }:
   })
 
   const assignTeam = useMutation({
-    mutationFn: (teamId: number) => ticketAPI.assignTeam(ticket.id, teamId),
+    mutationFn: (args: number | { teamId: number; employeeId?: number }) => {
+      if (typeof args === "number") {
+        return ticketAPI.assignTeam(ticket.id, args)
+      }
+      return ticketAPI.assignTeam(ticket.id, args.teamId, args.employeeId)
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ticket", ticket.id] })
       queryClient.invalidateQueries({ queryKey: ["tickets"] })
@@ -367,12 +372,8 @@ export function TicketAdminActions({ ticket, canModify, isTicketOwner = false }:
     }
 
     try {
-      // 1. Assign team terlebih dahulu
-      await assignTeam.mutateAsync(teamIdNum)
-      // 2. Assign member
-      await assignByEmployee.mutateAsync(employeeIdNum)
-      // 3. Open ticket
-      await openTicket.mutateAsync(undefined)
+      // Combined: Assign team + member in one call (also sets status to IN_PROGRESS)
+      await assignTeam.mutateAsync({ teamId: teamIdNum, employeeId: employeeIdNum })
       setShowProcessDialog(false)
       setProcessDialogTeam("")
       setProcessDialogMember("")
@@ -649,26 +650,12 @@ export function TicketAdminActions({ ticket, canModify, isTicketOwner = false }:
                     )}
                   </SelectContent>
                 </Select>
-                {teamId && !teamMembersLoading && teamMembers.length === 0 && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Tidak ada member di team ini. Tambah member (Employee) di Odoo: Helpdesk → Konfigurasi → Team.
-                  </p>
-                )}
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={handleAssignToMe}
-                  disabled={isDraft || assignToMe.isPending}
-                  title={isDraft ? "Proses ticket dulu" : "Assign ke saya"}
-                  className="shrink-0"
-                >
-                  {assignToMe.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <UserPlus className="h-4 w-4" />
-                  )}
-                </Button>
               </div>
+              {teamId && !teamMembersLoading && teamMembers.length === 0 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Tidak ada member di team ini. Tambah member (Employee) di Odoo: Helpdesk → Konfigurasi → Team.
+                </p>
+              )}
               {(ticket.assigned_employee?.name || ticket.assigned_user?.name) && (
                 <p className="text-xs text-green-600">
                   ✓ Ditangani: {ticket.assigned_employee?.name ?? ticket.assigned_user?.name}

@@ -109,6 +109,23 @@ export default function AdminTeamsPage() {
     },
   })
 
+  // Delete team (hard delete)
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => adminTeamAPI.deleteTeam(id),
+    onSuccess: (res) => {
+      toast({ title: "Berhasil", description: res.message || "Tim berhasil dihapus" })
+      queryClient.invalidateQueries({ queryKey: ["admin-teams"] })
+      queryClient.invalidateQueries({ queryKey: ["teams"] })
+    },
+    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
+      toast({
+        title: "Gagal",
+        description: err.response?.data?.message || "Gagal menghapus tim",
+        variant: "destructive",
+      })
+    },
+  })
+
   const handleCreateTeam = useCallback(
     async (data: { name: string; department_id?: number; department_name?: string; description?: string }) => {
       await createMutation.mutateAsync(data)
@@ -139,6 +156,14 @@ export default function AdminTeamsPage() {
       updateMutation.mutate({ id: teamId, is_active: isActive })
     },
     [updateMutation]
+  )
+
+  const handleDeleteTeam = useCallback(
+    (teamId: number, teamName: string) => {
+      if (!confirm(`Hapus permanen tim "${teamName}"? Tindakan ini tidak dapat dibatalkan.`)) return
+      deleteMutation.mutate(teamId)
+    },
+    [deleteMutation]
   )
 
   const handleRename = useCallback(
@@ -258,8 +283,9 @@ export default function AdminTeamsPage() {
                         onAddMember={(id) => setAddMemberTeamId(id)}
                         onRemoveMember={handleRemoveMember}
                         onToggleActive={handleToggleActive}
+                        onDelete={handleDeleteTeam}
                         onRename={handleRename}
-                        isUpdating={updateMutation.isPending || removeMemberMutation.isPending}
+                        isUpdating={updateMutation.isPending || removeMemberMutation.isPending || deleteMutation.isPending}
                       />
                     ))}
                   </div>

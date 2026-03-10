@@ -169,11 +169,11 @@ export const ticketAPI = {
       message: message || "",
     }),
 
-  /** Admin: Assign ticket ke team helpdesk */
-  assignTeam: (id: number, teamId: number, message?: string) =>
-    apiClient.post<ApiResponse<{ id: number; team: { id: number; name: string } }>>(
+  /** Admin: Assign ticket ke team helpdesk (optionally with member) */
+  assignTeam: (id: number, teamId: number, employeeId?: number, message?: string) =>
+    apiClient.post<ApiResponse<{ id: number; team: { id: number; name: string }; assignee?: { name: string } | null }>>(
       `/tickets/${id}/assign-team`,
-      { team_id: teamId, message: message || "" }
+      { team_id: teamId, employee_id: employeeId, message: message || "" }
     ),
 
   /** Admin: Post activity log (progress update dari manpower) */

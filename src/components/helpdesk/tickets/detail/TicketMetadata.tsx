@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { User, Building, Users, Calendar } from "lucide-react"
 import { formatDate } from "@/lib/utils"
 import { getStageColor, getDisplayStageName } from "@/lib/utils/ticket-helpers"
+import { useAuthStore } from "@/store/authStore"
 import type { Ticket } from "@/types"
 
 interface TicketMetadataProps {
@@ -13,7 +14,7 @@ interface TicketMetadataProps {
 }
 
 export function TicketMetadata({ ticket, isAdminUser }: TicketMetadataProps) {
-  const stageName = ticket.stage?.name ?? getDisplayStageName(ticket)
+  const stageName = ticket.stage?.name ?? getDisplayStageName(ticket, isAdminUser)
 
   const shortDate = (date: string | null | undefined) => {
     if (!date) return "-"
@@ -94,7 +95,8 @@ export function TicketMetadataSidebar({
 }: {
   ticket: Ticket
 }) {
-  const stageName = ticket.stage?.name ?? getDisplayStageName(ticket)
+  const isAdmin = useAuthStore((s) => s.isAdmin)
+  const stageName = ticket.stage?.name ?? getDisplayStageName(ticket, isAdmin())
   return (
     <Card>
       <CardHeader className="pb-3">

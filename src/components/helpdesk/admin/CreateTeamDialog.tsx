@@ -62,11 +62,13 @@ export function CreateTeamDialog({ open, onOpenChange, onCreate, isCreating }: C
     }
   }
 
+  const canCreate = !!selectedDeptId && !!teamName.trim()
+
   const handleCreate = async () => {
-    if (!teamName.trim()) return
+    if (!canCreate) return
     await onCreate({
       name: teamName.trim(),
-      department_id: selectedDeptId ? parseInt(selectedDeptId) : undefined,
+      department_id: parseInt(selectedDeptId),
       department_name: selectedDept?.name,
       description: description.trim() || undefined,
     })
@@ -136,6 +138,14 @@ export function CreateTeamDialog({ open, onOpenChange, onCreate, isCreating }: C
           </div>
 
           {/* Info */}
+          {!selectedDeptId && teamName.trim() && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <p className="text-xs font-medium text-amber-700">
+                ⚠️ Pilih department terlebih dahulu sebelum membuat tim
+              </p>
+            </div>
+          )}
+
           {selectedDept && (
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-950">
               <p className="text-xs font-medium text-blue-700 dark:text-blue-300">
@@ -154,7 +164,7 @@ export function CreateTeamDialog({ open, onOpenChange, onCreate, isCreating }: C
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isCreating}>
             Batal
           </Button>
-          <Button onClick={handleCreate} disabled={!teamName.trim() || isCreating}>
+          <Button onClick={handleCreate} disabled={!canCreate || isCreating}>
             {isCreating ? (
               <>
                 <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />

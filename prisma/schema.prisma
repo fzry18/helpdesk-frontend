@@ -190,7 +190,8 @@ model Attachment {
   filename    String
   mimetype    String
   fileSize    Int       @map("file_size")
-  filePath    String    @map("file_path")
+  filePath    String?   @map("file_path")
+  fileData    Bytes?    @map("file_data")
   createdAt   DateTime  @default(now()) @map("created_at")
 
   // Relations

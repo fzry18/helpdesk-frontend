@@ -1,12 +1,10 @@
 /**
  * GET /api/helpdesk/tickets/[id]/attachments - Get ticket attachments
- * POST /api/helpdesk/tickets/[id]/attachments - Upload attachments (base64)
+ * POST /api/helpdesk/tickets/[id]/attachments - Upload attachments (base64, stored in DB)
  */
 import { NextRequest } from "next/server"
 import { prisma } from "@/lib/server/prisma"
 import { getAuthEmployee, authError, isAdmin } from "@/lib/server/auth"
-import { writeFile, mkdir } from "fs/promises"
-import path from "path"
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -27,6 +25,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   const attachments = await prisma.attachment.findMany({
     where: { ticketId },
+    select: { id: true, name: true, filename: true, mimetype: true, fileSize: true, createdAt: true },
     orderBy: { createdAt: "desc" },
   })
 
@@ -67,23 +66,20 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return Response.json({ success: false, message: "Tidak ada file untuk diupload", data: null }, { status: 400 })
     }
 
-    // Ensure upload directory exists
-    const uploadDir = path.join(process.cwd(), "uploads", "tickets", String(ticketId))
-    await mkdir(uploadDir, { recursive: true })
-
     const createdAttachments = []
 
     for (const file of files) {
-      // Decode base64
-      const buffer = Buffer.from(file.file_data, "base64")
+      // Decode base64 - strip data URL prefix if present (e.g., "data:image/jpeg;base64,")
+      let base64Data = file.file_data
+      if (base64Data.includes(",")) {
+        base64Data = base64Data.split(",")[1]
+      }
+      const buffer = Buffer.from(base64Data, "base64")
       const safeName = file.filename.replace(/[^a-zA-Z0-9._-]/g, "_")
       const uniqueName = `${Date.now()}-${safeName}`
-      const filePath = path.join(uploadDir, uniqueName)
-
-      await writeFile(filePath, buffer)
 
       // Detect mimetype from extension
-      const ext = path.extname(safeName).toLowerCase()
+      const ext = safeName.substring(safeName.lastIndexOf('.')).toLowerCase()
       const mimeMap: Record<string, string> = {
         ".pdf": "application/pdf",
         ".png": "image/png",
@@ -100,6 +96,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         ".zip": "application/zip",
       }
 
+      // Store binary data directly in DB
       const attachment = await prisma.attachment.create({
         data: {
           ticketId,
@@ -107,7 +104,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           filename: uniqueName,
           mimetype: mimeMap[ext] || "application/octet-stream",
           fileSize: buffer.length,
-          filePath: filePath,
+          fileData: buffer,
         },
       })
 

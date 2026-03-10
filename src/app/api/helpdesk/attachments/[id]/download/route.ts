@@ -1,10 +1,9 @@
 /**
- * GET /api/helpdesk/attachments/[id]/download - Download attachment
+ * GET /api/helpdesk/attachments/[id]/download - Download attachment from DB
  */
 import { NextRequest } from "next/server"
 import { prisma } from "@/lib/server/prisma"
 import { getAuthEmployee, authError, isAdmin } from "@/lib/server/auth"
-import { readFile } from "fs/promises"
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -28,16 +27,22 @@ export async function GET(request: NextRequest, context: RouteContext) {
     return Response.json({ success: false, message: "Akses ditolak", data: null }, { status: 403 })
   }
 
-  try {
-    const fileBuffer = await readFile(attachment.filePath)
-    return new Response(fileBuffer, {
-      headers: {
-        "Content-Type": attachment.mimetype,
-        "Content-Disposition": `attachment; filename="${attachment.name}"`,
-        "Content-Length": String(attachment.fileSize),
-      },
-    })
-  } catch {
-    return Response.json({ success: false, message: "File tidak ditemukan di server", data: null }, { status: 404 })
+  if (!attachment.fileData) {
+    return Response.json({ success: false, message: "File data tidak tersedia", data: null }, { status: 404 })
   }
+
+  // Use inline for images (so preview works), attachment for other files
+  const isImage = attachment.mimetype.startsWith("image/")
+  const disposition = isImage
+    ? `inline; filename="${attachment.name}"`
+    : `attachment; filename="${attachment.name}"`
+
+  return new Response(attachment.fileData, {
+    headers: {
+      "Content-Type": attachment.mimetype,
+      "Content-Disposition": disposition,
+      "Content-Length": String(attachment.fileSize),
+      "Cache-Control": "private, max-age=3600",
+    },
+  })
 }

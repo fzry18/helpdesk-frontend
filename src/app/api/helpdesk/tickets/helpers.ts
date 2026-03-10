@@ -93,7 +93,7 @@ export function formatTicketResponse(ticket: PrismaTicket & {
   tags?: Array<{ tag: { id: number; name: string; color: number } }> | null
   attachments?: Array<{
     id: number; name: string; filename: string; mimetype: string;
-    fileSize: number; filePath: string; createdAt: Date
+    fileSize: number; filePath: string | null; fileData: Uint8Array | null; createdAt: Date
   }> | null
   messages?: Array<unknown> | null
 }) {

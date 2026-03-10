@@ -41,6 +41,15 @@ interface AttachmentListProps {
 // MIME types for images
 const IMAGE_MIMETYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"]
 
+/** Append auth token as query param so <img> can fetch authenticated URLs */
+function getAuthUrl(path: string): string {
+  if (typeof window === "undefined") return path
+  const token = localStorage.getItem("access_token")
+  if (!token) return path
+  const separator = path.includes("?") ? "&" : "?"
+  return `${path}${separator}token=${encodeURIComponent(token)}`
+}
+
 export function AttachmentList({
   ticketId,
   ticket,
@@ -54,23 +63,15 @@ export function AttachmentList({
 
   const { employee, isAdmin, getHelpdeskRole } = useAuthStore()
 
-  // Helper: buat URL gambar yang melewati Next.js proxy (self-referencing)
-  // Ini penting agar tidak kena blokir CSP
+  // Get the authenticated image URL for preview
   const getPreviewSrc = (attachment: Attachment): string => {
-    // Prioritaskan preview_url (content endpoint, inline display)
-    // Fallback ke url (download endpoint) jika preview_url tidak ada
-    const path = attachment.preview_url || attachment.url
-    if (!path) return ''
+    const path = attachment.url || `/api/helpdesk/attachments/${attachment.id}/download`
+    return getAuthUrl(path)
+  }
 
-    // Jika sudah absolute URL, return langsung
-    if (path.startsWith('http://') || path.startsWith('https://')) {
-      return path
-    }
-
-    // Gunakan URL relatif agar melewati Next.js proxy
-    // Path dari backend: /api/helpdesk/attachments/{id}/content
-    // Path will be served by local Next.js API routes
-    return path
+  // Get the API URL for an attachment
+  const getAttachmentSrc = (attachment: Attachment): string => {
+    return attachment.url || `/api/helpdesk/attachments/${attachment.id}/download`
   }
 
   const {
@@ -290,7 +291,6 @@ export function AttachmentList({
                     className="group relative aspect-square rounded-lg overflow-hidden bg-muted cursor-pointer"
                     onClick={() => openLightbox(index)}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={getPreviewSrc(img)}
                       alt={img.name || img.filename || "Attachment"}
@@ -423,7 +423,6 @@ export function AttachmentList({
 
             {/* Image */}
             {currentImage && (
-              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={getPreviewSrc(currentImage)}
                 alt={currentImage.name || currentImage.filename || "Attachment"}

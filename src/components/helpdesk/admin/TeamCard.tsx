@@ -43,6 +43,7 @@ interface TeamCardProps {
   onAddMember: (teamId: number) => void
   onRemoveMember: (teamId: number, memberId: number, memberName: string) => void
   onToggleActive: (teamId: number, isActive: boolean, teamName: string) => void
+  onDelete: (teamId: number, teamName: string) => void
   onRename: (teamId: number, newName: string, newDescription: string) => void
   isUpdating: boolean
 }
@@ -52,6 +53,7 @@ export function TeamCard({
   onAddMember,
   onRemoveMember,
   onToggleActive,
+  onDelete,
   onRename,
   isUpdating,
 }: TeamCardProps) {
@@ -166,6 +168,18 @@ export function TeamCard({
                 >
                   {team.is_active ? <PowerOff className="h-3.5 w-3.5" /> : <Power className="h-3.5 w-3.5" />}
                 </Button>
+                {!team.is_active && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-100"
+                    onClick={() => onDelete(team.id, team.name)}
+                    disabled={isUpdating}
+                    title="Hapus tim permanen"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                )}
               </>
             )}
             <Button

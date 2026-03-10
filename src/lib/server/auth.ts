@@ -81,12 +81,19 @@ export async function createSession(
 export async function getAuthEmployee(
   request: NextRequest
 ): Promise<Employee | null> {
+  // Support Bearer token from header OR ?token= query param (for <img> src)
+  let token: string | null = null
   const authHeader = request.headers.get("authorization")
-  if (!authHeader?.startsWith("Bearer ")) {
+  if (authHeader?.startsWith("Bearer ")) {
+    token = authHeader.slice(7)
+  } else {
+    token = request.nextUrl.searchParams.get("token")
+  }
+
+  if (!token) {
     return null
   }
 
-  const token = authHeader.slice(7)
   const payload = verifyToken(token)
   if (!payload) {
     return null

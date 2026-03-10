@@ -120,7 +120,7 @@ class APIClient {
 export const apiClient = new APIClient()
 
 /**
- * Get attachment download URL
+ * Get attachment download URL with auth token appended
  */
 export function getAttachmentUrl(relativeUrl: string | undefined | null): string {
   if (!relativeUrl) return ''
@@ -129,5 +129,14 @@ export function getAttachmentUrl(relativeUrl: string | undefined | null): string
   }
   // Attachments are served from our own API
   const normalizedPath = relativeUrl.startsWith('/') ? relativeUrl : `/${relativeUrl}`
+  
+  // Append token as query param for browser-initiated requests (like <a> clicks)
+  if (typeof window !== "undefined") {
+    const token = localStorage.getItem("access_token")
+    if (token) {
+      const separator = normalizedPath.includes("?") ? "&" : "?"
+      return `${normalizedPath}${separator}token=${encodeURIComponent(token)}`
+    }
+  }
   return normalizedPath
 }

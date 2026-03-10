@@ -46,14 +46,7 @@ export function formatActivityBody(rawBody: string): FormatActivityResult {
       const matchLen = match[0].length
       let content = text.slice(idx + matchLen).replace(/^\s*[:.\-]\s*/, "").trim()
 
-      if (label === "Team Assignment") {
-        const teamMatch = text.match(/team[:\s]*([A-Za-z0-9\s]+)/i)
-        if (teamMatch) content = teamMatch[1].trim()
-      }
-      if (label === "Member Assignment") {
-        const memberMatch = text.match(/member[:\s]*([A-Za-z0-9\s]+)/i)
-        if (memberMatch) content = memberMatch[1].trim()
-      }
+
       if (!content) {
         switch (label) {
           case "Ticket Diproses":
@@ -133,7 +126,7 @@ export interface TicketStageLike {
   stage_name?: string
 }
 
-export function getDisplayStageName(ticket: TicketStageLike): string {
+export function getDisplayStageName(ticket: TicketStageLike, isAdmin?: boolean): string {
   if (ticket.stage && typeof ticket.stage === "object" && "name" in ticket.stage) {
     return ticket.stage.name
   }
@@ -141,7 +134,7 @@ export function getDisplayStageName(ticket: TicketStageLike): string {
   if (typeof ticket.stage === "string" && ticket.stage) {
     return ticket.stage
   }
-  return "Sent"
+  return isAdmin ? "Draft" : "Sent"
 }
 
 export function getStageColor(stageName: string, isRejected?: boolean): string {
