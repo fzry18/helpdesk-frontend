@@ -13,7 +13,7 @@
 
 import { useQuery, useInfiniteQuery, useQueryClient } from "@tanstack/react-query"
 import { useCallback, useMemo } from "react"
-import { ticketAPI } from "@/lib/api/endpoints"
+import { ticketService } from "@/features/tickets/services/ticket.service"
 import { queryKeys, CACHE_TIME } from "@/lib/query/config"
 import { useAuthStore } from "@/features/auth/stores/auth.store"
 import { useTicketFilterStore } from "@/features/tickets/stores/ticket-filter.store"
@@ -89,7 +89,7 @@ export function useTicketList() {
   return useQuery({
     queryKey: queryKeys.tickets.list(filters),
     queryFn: () =>
-      ticketAPI.list({
+      ticketService.list({
         page,
         limit: pageSize,
         status: toApiStatus(status),
@@ -138,7 +138,7 @@ export function useInfiniteTicketList() {
   return useInfiniteQuery({
     queryKey: [...queryKeys.tickets.lists(), "infinite", filters],
     queryFn: ({ pageParam = 1 }) =>
-      ticketAPI.list({
+      ticketService.list({
         page: pageParam as number,
         limit: pageSize,
         status: toApiStatus(status),
@@ -176,7 +176,7 @@ export function usePrefetchTicket() {
     (ticketId: number) => {
       queryClient.prefetchQuery({
         queryKey: queryKeys.tickets.detail(ticketId),
-        queryFn: () => ticketAPI.get(ticketId),
+        queryFn: () => ticketService.get(ticketId),
         staleTime: CACHE_TIME.TICKET_DETAIL.staleTime,
       })
     },

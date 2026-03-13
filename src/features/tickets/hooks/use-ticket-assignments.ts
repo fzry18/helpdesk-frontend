@@ -12,7 +12,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { ticketAPI } from "@/lib/api/endpoints"
+import { ticketService } from "@/features/tickets/services/ticket.service"
 import { queryKeys } from "@/lib/query/config"
 
 // ─────────────────────────────────────────────────────────────
@@ -46,7 +46,7 @@ export function useAssignTeam(
       teamId: number
       employeeId?: number
       message?: string
-    }) => ticketAPI.assignTeam(ticketId, teamId, employeeId, message),
+    }) => ticketService.assignTeam(ticketId, teamId, employeeId, message),
     onSuccess: ({ data }) => {
       invalidate()
       const msg = data.assignee
@@ -73,7 +73,7 @@ export function useAssignEmployee(
 
   return useMutation({
     mutationFn: (employeeId: number) =>
-      ticketAPI.assignByEmployee(ticketId, employeeId),
+      ticketService.assignByEmployee(ticketId, employeeId),
     onSuccess: ({ data }) => {
       invalidate()
       const name = data.assigned_employee?.name ?? "anggota tim"
@@ -97,7 +97,7 @@ export function useAssignToMe(
   const invalidate = useInvalidateTicket(ticketId)
 
   return useMutation({
-    mutationFn: () => ticketAPI.assignToMe(ticketId),
+    mutationFn: () => ticketService.assignToMe(ticketId),
     onSuccess: () => {
       invalidate()
       toast.success("Tiket di-assign ke Anda")
@@ -126,7 +126,7 @@ export function usePostActivityLog(
     }: {
       content: string
       activityType?: "progress" | "note" | "update"
-    }) => ticketAPI.postActivityLog(ticketId, content, activityType),
+    }) => ticketService.postActivityLog(ticketId, content, activityType),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.tickets.thread(ticketId) })
       toast.success("Catatan progress berhasil ditambahkan")

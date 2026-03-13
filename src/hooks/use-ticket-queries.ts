@@ -15,7 +15,7 @@ import { ticketAPI, messageAPI } from '@/lib/api/endpoints'
 import { queryKeys, CACHE_TIME, invalidation } from '@/lib/query/config'
 import { toast } from '@/hooks/use-toast'
 import { getErrorMessage } from '@/lib/constants/error-messages'
-import { useAuthStore } from '@/store/authStore'
+import { useAuthStore } from '@/features/auth/stores/auth.store'
 import type { Ticket } from '@/types'
 
 // Types

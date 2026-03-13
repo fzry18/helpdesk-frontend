@@ -6,10 +6,22 @@
  */
 import { io, Socket } from "socket.io-client"
 
-const SOCKET_URL =
-  process.env.NEXT_PUBLIC_SOCKET_URL ||
-  process.env.NEXT_PUBLIC_API_BASE_URL?.replace("/api/helpdesk", "") ||
-  "http://localhost:8069"
+function resolveSocketUrl(): string {
+  if (process.env.NEXT_PUBLIC_SOCKET_URL) {
+    return process.env.NEXT_PUBLIC_SOCKET_URL
+  }
+
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL
+  if (apiBaseUrl) {
+    return apiBaseUrl.replace("/api/helpdesk", "")
+  }
+
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin
+  }
+
+  return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+}
 
 let socketInstance: Socket | null = null
 
@@ -20,6 +32,8 @@ let socketInstance: Socket | null = null
  * - Jika instance belum ada, buat yang baru.
  */
 export function createSocket(token: string): Socket {
+  const socketUrl = resolveSocketUrl()
+
   if (socketInstance) {
     if (!socketInstance.connected) {
       socketInstance.connect()
@@ -27,7 +41,7 @@ export function createSocket(token: string): Socket {
     return socketInstance
   }
 
-  socketInstance = io(SOCKET_URL, {
+  socketInstance = io(socketUrl, {
     auth: { token },
     transports: ["websocket", "polling"],
     reconnection: true,

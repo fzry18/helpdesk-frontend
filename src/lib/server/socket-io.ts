@@ -10,8 +10,31 @@
  *   Jika tidak diset, adapter in-memory default dipakai (single-process).
  */
 import type { Server as SocketIOServer } from "socket.io"
+import Redis from "ioredis"
+import { createAdapter } from "@socket.io/redis-adapter"
 
 let _io: SocketIOServer | null = null
+
+async function waitUntilRedisReady(client: Redis): Promise<void> {
+  if (client.status === "ready") {
+    return
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const onReady = () => {
+      client.off("error", onError)
+      resolve()
+    }
+
+    const onError = (error: Error) => {
+      client.off("ready", onReady)
+      reject(error)
+    }
+
+    client.once("ready", onReady)
+    client.once("error", onError)
+  })
+}
 
 /**
  * Inisialisasi IO singleton dan pasang Redis adapter jika REDIS_URL ada.
@@ -20,35 +43,26 @@ let _io: SocketIOServer | null = null
 export async function initIO(io: SocketIOServer): Promise<void> {
   _io = io
 
-  const redisUrl = process.env.REDIS_URL
-  if (redisUrl) {
-    try {
-      // Dynamic import agar tidak error di lingkungan yang tidak punya ioredis
-      const { createClient } = await import("ioredis").then((m) => ({ createClient: m.default }))
-      const { createAdapter } = await import("@socket.io/redis-adapter")
+  const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379"
+  let pubClient: Redis | null = null
+  let subClient: Redis | null = null
 
-      // Dua koneksi terpisah diperlukan oleh Socket.IO redis adapter
-      const pubClient = new createClient(redisUrl)
-      const subClient = pubClient.duplicate()
+  try {
+    // Dua koneksi terpisah diperlukan oleh Socket.IO redis adapter
+    pubClient = new Redis(redisUrl)
+    subClient = pubClient.duplicate()
 
-      await Promise.all([
-        new Promise<void>((resolve, reject) => {
-          pubClient.once("ready", resolve)
-          pubClient.once("error", reject)
-        }),
-        new Promise<void>((resolve, reject) => {
-          subClient.once("ready", resolve)
-          subClient.once("error", reject)
-        }),
-      ])
-
-      io.adapter(createAdapter(pubClient, subClient))
-      console.info(`  Socket.IO Redis adapter aktif: ${redisUrl}`)
-    } catch (err) {
-      console.warn("  Socket.IO Redis adapter gagal, menggunakan in-memory adapter:", err)
+    await Promise.all([waitUntilRedisReady(pubClient), waitUntilRedisReady(subClient)])
+    io.adapter(createAdapter(pubClient, subClient))
+    console.info(`  Socket.IO Redis adapter aktif: ${redisUrl}`)
+  } catch (err) {
+    console.warn("  Socket.IO Redis adapter gagal, menggunakan in-memory adapter:", err)
+    if (pubClient) {
+      pubClient.disconnect()
     }
-  } else {
-    console.info("  REDIS_URL tidak diset — Socket.IO menggunakan in-memory adapter")
+    if (subClient) {
+      subClient.disconnect()
+    }
   }
 }
 

@@ -5,7 +5,7 @@
 import { NextRequest } from "next/server"
 import { prisma } from "@/lib/server/prisma"
 import { getAuthEmployee, authError, isAdmin } from "@/lib/server/auth"
-import { getIO } from "@/lib/server/socket-io"
+import { emitToRoom } from "@/lib/server/socket-emitter"
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -117,7 +117,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   })
 
   // Broadcast ke semua klien yang bergabung di room "ticket:{ticketId}"
-  // getIO() returns null saat custom server belum aktif (build time) — aman
+  // Gunakan io singleton jika tersedia, fallback ke Redis emitter untuk konteks multi-process.
   // Shape harus sesuai MessageNewPayload: { ticket_id, data: Message }
   const messageData = {
     id: message.id,
@@ -132,7 +132,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     is_internal: message.isInternal,
     internal: message.isInternal,
   }
-  getIO()?.to(`ticket:${ticketId}`).emit("message_new", {
+  await emitToRoom(`ticket:${ticketId}`, "message_new", {
     ticket_id: ticketId,
     data: messageData,
   })

@@ -78,6 +78,16 @@ export const authAPI = {
 // 🎫 TICKET API
 // ============================================
 export const ticketAPI = {
+  performAction: <T = unknown>(
+    id: number,
+    action: string,
+    payload: Record<string, unknown> = {}
+  ) =>
+    apiClient.post<ApiResponse<T>>(`/tickets/${id}/actions`, {
+      action,
+      ...payload,
+    }),
+
   list: (params?: {
     page?: number
     limit?: number
@@ -115,23 +125,23 @@ export const ticketAPI = {
   delete: (id: number) => apiClient.delete(`/tickets/${id}`),
 
   updateStage: (id: number, stageId: number) =>
-    apiClient.put<ApiResponse<Ticket>>(`/tickets/${id}/stage`, {
+    ticketAPI.performAction<Ticket>(id, "update_stage", {
       stage_id: stageId,
     }),
 
   assignUser: (id: number, userId: number) =>
-    apiClient.put<ApiResponse<Ticket>>(`/tickets/${id}/assign`, {
+    ticketAPI.performAction<Ticket>(id, "assign", {
       user_id: userId,
     }),
 
   /** Admin: Assign by employee (nama yang mengerjakan) - tidak wajib punya User di Odoo */
   assignByEmployee: (id: number, employeeId: number) =>
-    apiClient.put<ApiResponse<Ticket>>(`/tickets/${id}/assign`, {
+    ticketAPI.performAction<Ticket>(id, "assign", {
       employee_id: employeeId,
     }),
 
   assignToMe: (id: number) =>
-    apiClient.put<ApiResponse<Ticket>>(`/tickets/${id}/assign`, {
+    ticketAPI.performAction<Ticket>(id, "assign", {
       assign_to_me: true,
     }),
 
@@ -142,13 +152,13 @@ export const ticketAPI = {
 
   /** Admin: minta konfirmasi user bahwa ticket sudah selesai */
   requestConfirmation: (id: number, message?: string) =>
-    apiClient.post<ApiResponse<Ticket>>(`/tickets/${id}/request-confirmation`, {
+    ticketAPI.performAction<Ticket>(id, "request_confirmation", {
       message: message || "",
     }),
 
   /** Admin: langsung close ticket tanpa konfirmasi user */
   closeTicket: (id: number, message?: string) =>
-    apiClient.post<ApiResponse<Ticket>>(`/tickets/${id}/close`, {
+    ticketAPI.performAction<Ticket>(id, "close", {
       message: message || "",
     }),
 
@@ -157,7 +167,7 @@ export const ticketAPI = {
     id: number,
     data?: { satisfaction?: string; feedback?: string }
   ) =>
-    apiClient.post<ApiResponse<Ticket>>(`/tickets/${id}/confirm-resolved`, data || {}),
+    ticketAPI.performAction<Ticket>(id, "confirm_resolved", data || {}),
 
   // ============================================
   // NEW WORKFLOW ENDPOINTS (sesuai BACKEND_SPEC_WORKFLOW.md)
@@ -165,14 +175,15 @@ export const ticketAPI = {
 
   /** Admin: Open/Progress ticket (Draft → In Progress) */
   openTicket: (id: number, message?: string) =>
-    apiClient.post<ApiResponse<Ticket>>(`/tickets/${id}/open`, {
+    ticketAPI.performAction<Ticket>(id, "open", {
       message: message || "",
     }),
 
   /** Admin: Assign ticket ke team helpdesk (optionally with member) */
   assignTeam: (id: number, teamId: number, employeeId?: number, message?: string) =>
-    apiClient.post<ApiResponse<{ id: number; team: { id: number; name: string }; assignee?: { name: string } | null }>>(
-      `/tickets/${id}/assign-team`,
+    ticketAPI.performAction<{ id: number; team: { id: number; name: string }; assignee?: { name: string } | null }>(
+      id,
+      "assign_team",
       { team_id: teamId, employee_id: employeeId, message: message || "" }
     ),
 
@@ -182,8 +193,9 @@ export const ticketAPI = {
     content: string,
     activityType?: "progress" | "note" | "update"
   ) =>
-    apiClient.post<ApiResponse<{ id: number; content: string; activity_type: string; create_date: string }>>(
-      `/tickets/${id}/activity-log`,
+    ticketAPI.performAction<{ id: number; content: string; activity_type: string; create_date: string }>(
+      id,
+      "post_activity_log",
       { content, activity_type: activityType || "progress" }
     ),
 
@@ -203,14 +215,15 @@ export const ticketAPI = {
 
   /** Admin: Reject ticket dengan alasan */
   rejectTicket: (id: number, reason: string) =>
-    apiClient.post<ApiResponse<Ticket>>(`/tickets/${id}/reject`, {
+    ticketAPI.performAction<Ticket>(id, "reject", {
       reason,
     }),
 
   /** Admin: Set priority ticket (0-4) */
   setPriority: (id: number, priority: string) =>
-    apiClient.post<ApiResponse<{ id: number; priority: string; priority_label: string }>>(
-      `/tickets/${id}/priority`,
+    ticketAPI.performAction<{ id: number; priority: string; priority_label: string }>(
+      id,
+      "set_priority",
       { priority }
     ),
 }

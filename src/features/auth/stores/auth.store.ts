@@ -105,6 +105,7 @@ export const useAuthStore = create<AuthStore>()(
         setAuth: ({ employee, accessToken }) => {
           if (typeof window !== "undefined") {
             localStorage.setItem("access_token", accessToken)
+            document.cookie = `access_token=${encodeURIComponent(accessToken)}; path=/; samesite=lax`
           }
           set((state) => {
             state.employee = employee
@@ -123,6 +124,7 @@ export const useAuthStore = create<AuthStore>()(
         logout: () => {
           if (typeof window !== "undefined") {
             localStorage.removeItem("access_token")
+            document.cookie = "access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; samesite=lax"
           }
           destroySocket()
           set((state) => {

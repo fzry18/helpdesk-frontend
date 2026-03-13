@@ -11,7 +11,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useMemo } from "react"
-import { ticketAPI, messageAPI } from "@/lib/api/endpoints"
+import { ticketService } from "@/features/tickets/services/ticket.service"
 import { queryKeys, CACHE_TIME } from "@/lib/query/config"
 import type { Ticket } from "@/types"
 
@@ -33,7 +33,7 @@ export function useTicketDetail(
 
   return useQuery({
     queryKey: queryKeys.tickets.detail(id),
-    queryFn: () => ticketAPI.get(id),
+    queryFn: () => ticketService.get(id),
     enabled: options?.enabled ?? id > 0,
     staleTime: CACHE_TIME.TICKET_DETAIL.staleTime,
     gcTime: CACHE_TIME.TICKET_DETAIL.gcTime,
@@ -60,7 +60,7 @@ export function useTicketThread(
 
   return useQuery({
     queryKey: queryKeys.tickets.thread(id),
-    queryFn: () => messageAPI.getThread(id),
+    queryFn: () => ticketService.getThread(id),
     enabled: options?.enabled ?? id > 0,
     staleTime: CACHE_TIME.TICKET_MESSAGES.staleTime,
     gcTime: CACHE_TIME.TICKET_MESSAGES.gcTime,

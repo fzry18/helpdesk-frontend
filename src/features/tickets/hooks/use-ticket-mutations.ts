@@ -19,7 +19,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { ticketAPI, messageAPI, type CreateTicketPayload } from "@/lib/api/endpoints"
+import { ticketService, type CreateTicketPayload } from "@/features/tickets/services/ticket.service"
 import { queryKeys } from "@/lib/query/config"
 
 // ─────────────────────────────────────────────────────────────
@@ -45,7 +45,7 @@ export function useCreateTicket(options?: { onSuccess?: (ticketId: number) => vo
   const invalidate = useInvalidateTicket()
 
   return useMutation({
-    mutationFn: (payload: CreateTicketPayload) => ticketAPI.create(payload),
+    mutationFn: (payload: CreateTicketPayload) => ticketService.create(payload),
     onSuccess: ({ data }) => {
       invalidate()
       toast.success(`Tiket #${data.ticket_number} berhasil dibuat`)
@@ -68,8 +68,8 @@ export function useUpdateTicket(
   const invalidate = useInvalidateTicket()
 
   return useMutation({
-    mutationFn: (payload: Parameters<typeof ticketAPI.update>[1]) =>
-      ticketAPI.update(ticketId, payload),
+    mutationFn: (payload: Parameters<typeof ticketService.update>[1]) =>
+      ticketService.update(ticketId, payload),
     onSuccess: () => {
       invalidate(ticketId)
       toast.success("Tiket berhasil diperbarui")
@@ -89,7 +89,7 @@ export function useUpdateTicketStage(ticketId: number) {
   const invalidate = useInvalidateTicket()
 
   return useMutation({
-    mutationFn: (stageId: number) => ticketAPI.updateStage(ticketId, stageId),
+    mutationFn: (stageId: number) => ticketService.updateStage(ticketId, stageId),
     onSuccess: () => {
       invalidate(ticketId)
     },
@@ -108,7 +108,7 @@ export function useOpenTicket(options?: { onSuccess?: () => void }) {
 
   return useMutation({
     mutationFn: ({ id, message }: { id: number; message?: string }) =>
-      ticketAPI.openTicket(id, message),
+      ticketService.openTicket(id, message),
     onSuccess: ({ data }) => {
       invalidate(data.id)
       toast.success("Tiket berhasil dibuka")
@@ -129,7 +129,7 @@ export function useCloseTicket(options?: { onSuccess?: () => void }) {
 
   return useMutation({
     mutationFn: ({ id, message }: { id: number; message?: string }) =>
-      ticketAPI.closeTicket(id, message),
+      ticketService.closeTicket(id, message),
     onSuccess: ({ data }) => {
       invalidate(data.id)
       toast.success("Tiket berhasil ditutup")
@@ -150,7 +150,7 @@ export function useRequestConfirmation(options?: { onSuccess?: () => void }) {
 
   return useMutation({
     mutationFn: ({ id, message }: { id: number; message?: string }) =>
-      ticketAPI.requestConfirmation(id, message),
+      ticketService.requestConfirmation(id, message),
     onSuccess: ({ data }) => {
       invalidate(data.id)
       toast.success("Permintaan konfirmasi terkirim ke user")
@@ -176,7 +176,7 @@ export function useConfirmResolved(options?: { onSuccess?: () => void }) {
     }: {
       id: number
       data?: { satisfaction?: string; feedback?: string }
-    }) => ticketAPI.confirmResolved(id, data),
+    }) => ticketService.confirmResolved(id, data),
     onSuccess: ({ data }) => {
       invalidate(data.id)
       toast.success("Terima kasih! Tiket telah dikonfirmasi selesai")
@@ -197,7 +197,7 @@ export function useRejectTicket(options?: { onSuccess?: () => void }) {
 
   return useMutation({
     mutationFn: ({ id, reason }: { id: number; reason: string }) =>
-      ticketAPI.rejectTicket(id, reason),
+      ticketService.rejectTicket(id, reason),
     onSuccess: ({ data }) => {
       invalidate(data.id)
       toast.success("Tiket berhasil ditolak")
@@ -217,7 +217,7 @@ export function useSetPriority(ticketId: number) {
   const invalidate = useInvalidateTicket()
 
   return useMutation({
-    mutationFn: (priority: string) => ticketAPI.setPriority(ticketId, priority),
+    mutationFn: (priority: string) => ticketService.setPriority(ticketId, priority),
     onSuccess: () => {
       invalidate(ticketId)
       toast.success("Prioritas tiket diperbarui")
@@ -240,7 +240,7 @@ export function usePostMessage(
 
   return useMutation({
     mutationFn: (data: { body: string; internal?: boolean }) =>
-      messageAPI.postMessage(ticketId, data),
+      ticketService.postMessage(ticketId, data),
     onSuccess: () => {
       // Hanya invalidate thread agar list tidak di-refetch
       invalidate(ticketId)

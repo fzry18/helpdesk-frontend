@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { useMutation } from "@tanstack/react-query"
-import { authAPI } from "@/lib/api/endpoints"
+import { authService } from "@/features/auth/services/auth.service"
 import { useAuthStore } from "@/features/auth/stores/auth.store"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -76,7 +76,7 @@ export default function LoginPage() {
   })
 
   const loginMutation = useMutation({
-    mutationFn: (data: LoginFormData) => authAPI.login(data),
+    mutationFn: (data: LoginFormData) => authService.login(data),
     onSuccess: (response) => {
       // Handle PASSWORD_CHANGE_REQUIRED (409 resolved as normal response)
       const resp = response as unknown as Record<string, unknown>
@@ -139,7 +139,7 @@ export default function LoginPage() {
 
   const changePasswordMutation = useMutation({
     mutationFn: (data: { nik: string; oldPassword: string; newPassword: string }) =>
-      authAPI.forceChangePassword(data.nik, data.oldPassword, data.newPassword),
+      authService.forceChangePassword(data.nik, data.oldPassword, data.newPassword),
     onSuccess: () => {
       toast({
         title: "Password berhasil diubah",

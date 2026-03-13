@@ -3,6 +3,7 @@
  * Login using Odoo Employee API, create local session
  */
 import { NextRequest } from "next/server"
+import { NextResponse } from "next/server"
 import { prisma } from "@/lib/server/prisma"
 import { createSession } from "@/lib/server/auth"
 import { odooEmployeeLogin, odooFindEmployeeByNik, odooGetMe } from "@/lib/server/odoo-client"
@@ -135,7 +136,7 @@ export async function POST(request: NextRequest) {
     const session = await createSession(employee.id, odooData.token)
 
     // 7. Return response matching frontend expectations
-    return Response.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         access_token: session.token,
@@ -156,6 +157,16 @@ export async function POST(request: NextRequest) {
         },
       },
     })
+
+    response.cookies.set("access_token", session.token, {
+      httpOnly: false,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      expires: session.expiresAt,
+    })
+
+    return response
   } catch (error) {
     console.error("Login error:", error)
     return Response.json(
