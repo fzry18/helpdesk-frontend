@@ -4,7 +4,9 @@ import { use, useRef, useMemo } from "react"
 import type { MessageFormRef } from "@/components/helpdesk/tickets/detail/MessageForm"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { ticketAPI, messageAPI } from "@/lib/api/endpoints"
-import { useAuthStore } from "@/store/authStore"
+import { useAuthStore } from "@/features/auth/stores/auth.store"
+import { queryKeys } from "@/lib/query/config"
+import { useTicketRealtime } from "@/features/realtime/hooks/use-ticket-realtime"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/hooks/use-toast"
@@ -35,16 +37,23 @@ export default function TicketDetailPage({
   const { isAdmin, getHelpdeskRole, employee } = useAuthStore()
   const messageFormRef = useRef<MessageFormRef>(null)
 
+  // Fix Bug #1: Gunakan queryKeys.* yang sama dengan yang dipakai ws-manager
+  // untuk memastikan setQueryData dari socket mengenai cache yang sama.
   const { data: ticketData, isLoading: ticketLoading, error: ticketError } = useQuery({
-    queryKey: ["ticket", ticketId],
+    queryKey: queryKeys.tickets.detail(ticketId),
     queryFn: () => ticketAPI.get(ticketId),
   })
 
   const { data: threadData, isLoading: messagesLoading } = useQuery({
-    queryKey: ["ticket", ticketId, "thread"],
+    queryKey: queryKeys.tickets.thread(ticketId),
     queryFn: () => messageAPI.getThread(ticketId),
     enabled: !!ticketId,
   })
+
+  // Fix Bug #2: Daftarkan socket listeners untuk tiket ini.
+  // Hook ini join room "ticket:{ticketId}" dan subscribe event message_new,
+  // sehingga pesan baru langsung mengupdate cache thread di atas.
+  useTicketRealtime({ ticketId })
 
   const allMessages = (threadData?.data && Array.isArray(threadData.data)
     ? threadData.data
@@ -94,7 +103,8 @@ export default function TicketDetailPage({
     onSuccess: () => {
       toast({ title: "Pesan terkirim" })
       messageFormRef.current?.reset()
-      queryClient.invalidateQueries({ queryKey: ["ticket", ticketId, "thread"] })
+      // Fix: pakai queryKeys agar konsisten dengan kunci fetch + socket
+      queryClient.invalidateQueries({ queryKey: queryKeys.tickets.thread(ticketId) })
     },
     onError: (error: unknown) => {
       toast({
@@ -110,7 +120,7 @@ export default function TicketDetailPage({
       ticketAPI.confirmResolved(ticketId, data),
     onSuccess: () => {
       toast({ title: "Ticket dikonfirmasi selesai" })
-      queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.tickets.detail(ticketId) })
     },
     onError: (error: unknown) => {
       toast({

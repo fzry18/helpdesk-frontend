@@ -12,7 +12,7 @@ import {
   getSystemLabel,
   getSystemBadgeStyle,
 } from "@/lib/utils/ticket-helpers"
-import { useAuthStore } from "@/store/authStore"
+import { useAuthStore } from "@/features/auth/stores/auth.store"
 import type { Ticket } from "@/types"
 
 interface TicketHeaderProps {

@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { toast } from "@/hooks/use-toast"
-import { useAuthStore } from "@/store/authStore"
+import { useAuthStore } from "@/features/auth/stores/auth.store"
 import { Plus, Loader2, AlertCircle } from "lucide-react"
 import { getErrorMessage } from "@/lib/constants/error-messages"
 import {

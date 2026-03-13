@@ -5,6 +5,7 @@
 import { NextRequest } from "next/server"
 import { prisma } from "@/lib/server/prisma"
 import { getAuthEmployee, authError, isAdmin } from "@/lib/server/auth"
+import { getIO } from "@/lib/server/socket-io"
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -115,20 +116,29 @@ export async function POST(request: NextRequest, context: RouteContext) {
     data: { updatedAt: new Date() },
   })
 
+  // Broadcast ke semua klien yang bergabung di room "ticket:{ticketId}"
+  // getIO() returns null saat custom server belum aktif (build time) — aman
+  // Shape harus sesuai MessageNewPayload: { ticket_id, data: Message }
+  const messageData = {
+    id: message.id,
+    body: message.body,
+    body_plain: message.bodyPlain,
+    author: message.author
+      ? { id: message.author.id, name: message.author.name, email: message.author.email }
+      : null,
+    date: message.createdAt.toISOString(),
+    create_date: message.createdAt.toISOString(),
+    message_type: message.messageType,
+    is_internal: message.isInternal,
+    internal: message.isInternal,
+  }
+  getIO()?.to(`ticket:${ticketId}`).emit("message_new", {
+    ticket_id: ticketId,
+    data: messageData,
+  })
+
   return Response.json({
     success: true,
-    data: {
-      id: message.id,
-      body: message.body,
-      body_plain: message.bodyPlain,
-      author: message.author
-        ? { id: message.author.id, name: message.author.name, email: message.author.email }
-        : null,
-      date: message.createdAt.toISOString(),
-      create_date: message.createdAt.toISOString(),
-      message_type: message.messageType,
-      is_internal: message.isInternal,
-      internal: message.isInternal,
-    },
+    data: messageData,
   }, { status: 201 })
 }

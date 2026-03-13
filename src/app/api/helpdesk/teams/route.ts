@@ -1,22 +1,17 @@
 /**
  * GET /api/helpdesk/teams - List teams
- * Dept_admin: filtered to own department's teams only
+ * All admins can see all active teams (cross-department assignment supported)
  * Super_admin: all teams
  */
 import { NextRequest } from "next/server"
 import { prisma } from "@/lib/server/prisma"
-import { getAuthEmployee, authError, isAdmin, isSuperAdmin } from "@/lib/server/auth"
+import { getAuthEmployee, authError, isAdmin } from "@/lib/server/auth"
 
 export async function GET(request: NextRequest) {
   const employee = await getAuthEmployee(request)
   if (!employee) return authError("Tidak terautentikasi")
 
   const where: Record<string, unknown> = { isActive: true }
-
-  // Dept_admin: only see teams linked to their department
-  if (isAdmin(employee) && !isSuperAdmin(employee) && employee.departmentId) {
-    where.departmentId = employee.departmentId
-  }
 
   const teams = await prisma.team.findMany({
     where,

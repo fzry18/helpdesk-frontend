@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { User, Building, Users, Calendar } from "lucide-react"
 import { formatDate } from "@/lib/utils"
 import { getStageColor, getDisplayStageName } from "@/lib/utils/ticket-helpers"
-import { useAuthStore } from "@/store/authStore"
+import { useAuthStore } from "@/features/auth/stores/auth.store"
 import type { Ticket } from "@/types"
 
 interface TicketMetadataProps {

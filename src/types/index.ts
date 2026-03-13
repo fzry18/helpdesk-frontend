@@ -251,6 +251,7 @@ export interface TrendData {
   count: number
 }
 
+
 export interface TeamPerformance {
   team: { id: number; name: string }
   summary: {
@@ -268,3 +269,11 @@ export interface TeamPerformance {
   }>
 }
 
+/** Standard error shape dari API */
+export interface ApiError {
+  message: string
+  code?: string
+  statusCode?: number
+  /** Validation errors per field: { fieldName: ["pesan error"] } */
+  details?: Record<string, string[]>
+}

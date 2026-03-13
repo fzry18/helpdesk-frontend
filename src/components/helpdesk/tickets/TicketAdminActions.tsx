@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ticketAPI, masterDataAPI } from "@/lib/api/endpoints"
 import { Button } from "@/components/ui/button"
@@ -8,7 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
@@ -85,14 +87,26 @@ export function TicketAdminActions({ ticket, canModify, isTicketOwner = false }:
     setSelectedPriority(ticket.priority ?? "")
   }, [ticket.priority])
 
-  // Fetch teams (backend filters by dept_admin's department)
+  // Fetch all teams (cross-department assignment supported)
   const { data: teamsData } = useQuery({
     queryKey: ["teams"],
     queryFn: () => masterDataAPI.getTeams(),
   })
 
-  // Auto-select team when dept_admin has only 1 team available
   const teams = teamsData?.data || []
+
+  // Group teams by department for dropdown display
+  const teamsByDept = useMemo(() => {
+    const groups: Record<string, typeof teams> = {}
+    for (const team of teams) {
+      const dept = team.department_name || "Lainnya"
+      if (!groups[dept]) groups[dept] = []
+      groups[dept].push(team)
+    }
+    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b))
+  }, [teams])
+
+  // Auto-select team when dept_admin has only 1 team available
   useEffect(() => {
     if (teams.length === 1 && !teamId) {
       const singleTeam = teams[0].id.toString()
@@ -599,16 +613,21 @@ export function TicketAdminActions({ ticket, canModify, isTicketOwner = false }:
                   <SelectValue placeholder="Pilih team..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {teams.map((team) => (
-                    <SelectItem key={team.id} value={team.id.toString()}>
-                      <span className="flex items-center gap-2">
-                        <Users className="h-3 w-3" />
-                        {team.name}
-                        <span className="text-xs text-muted-foreground">
-                          ({team.member_count || 0})
-                        </span>
-                      </span>
-                    </SelectItem>
+                  {teamsByDept.map(([dept, deptTeams]) => (
+                    <SelectGroup key={dept}>
+                      <SelectLabel className="text-xs font-semibold text-muted-foreground">{dept}</SelectLabel>
+                      {deptTeams.map((team) => (
+                        <SelectItem key={team.id} value={team.id.toString()}>
+                          <span className="flex items-center gap-2">
+                            <Users className="h-3 w-3" />
+                            {team.name}
+                            <span className="text-xs text-muted-foreground">
+                              ({team.member_count || 0})
+                            </span>
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
                   ))}
                 </SelectContent>
               </Select>
@@ -832,16 +851,21 @@ export function TicketAdminActions({ ticket, canModify, isTicketOwner = false }:
                   <SelectValue placeholder="Pilih team..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {teams.map((team) => (
-                    <SelectItem key={team.id} value={team.id.toString()}>
-                      <span className="flex items-center gap-2">
-                        <Users className="h-3 w-3" />
-                        {team.name}
-                        <span className="text-xs text-muted-foreground">
-                          ({team.member_count || 0})
-                        </span>
-                      </span>
-                    </SelectItem>
+                  {teamsByDept.map(([dept, deptTeams]) => (
+                    <SelectGroup key={dept}>
+                      <SelectLabel className="text-xs font-semibold text-muted-foreground">{dept}</SelectLabel>
+                      {deptTeams.map((team) => (
+                        <SelectItem key={team.id} value={team.id.toString()}>
+                          <span className="flex items-center gap-2">
+                            <Users className="h-3 w-3" />
+                            {team.name}
+                            <span className="text-xs text-muted-foreground">
+                              ({team.member_count || 0})
+                            </span>
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
                   ))}
                 </SelectContent>
               </Select>

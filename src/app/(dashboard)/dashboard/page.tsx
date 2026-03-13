@@ -4,7 +4,7 @@ import React, { useMemo, useCallback, Suspense } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useRouter } from "next/navigation"
 import { dashboardAPI } from "@/lib/api/endpoints"
-import { useAuthStore, selectIsAdmin, selectHelpdeskRole } from "@/store/authStore"
+import { useAuthStore, selectIsAdmin, selectHelpdeskRole } from "@/features/auth/stores/auth.store"
 import { LazyDashboardStats, LazyUserDashboardStats, LazyRecentTickets, useLazyLoad } from "@/components/lazy/LazyComponents"
 import dynamic from 'next/dynamic'
 import { Skeleton } from '@/components/ui/skeleton'

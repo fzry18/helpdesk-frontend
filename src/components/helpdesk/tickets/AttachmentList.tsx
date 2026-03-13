@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useMemo } from "react"
 import { useAttachments } from "@/hooks/use-attachments"
-import { useAuthStore } from "@/store/authStore"
+import { useAuthStore } from "@/features/auth/stores/auth.store"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"

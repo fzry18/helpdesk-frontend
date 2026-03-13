@@ -127,14 +127,21 @@ export interface TicketStageLike {
 }
 
 export function getDisplayStageName(ticket: TicketStageLike, isAdmin?: boolean): string {
+  let name = ""
   if (ticket.stage && typeof ticket.stage === "object" && "name" in ticket.stage) {
-    return ticket.stage.name
+    name = ticket.stage.name
+  } else if (ticket.stage_name) {
+    name = ticket.stage_name
+  } else if (typeof ticket.stage === "string" && ticket.stage) {
+    name = ticket.stage
+  } else {
+    name = "Draft"
   }
-  if (ticket.stage_name) return ticket.stage_name
-  if (typeof ticket.stage === "string" && ticket.stage) {
-    return ticket.stage
+  // User sees "Sent" instead of "Draft"
+  if (!isAdmin && name.toLowerCase() === "draft") {
+    return "Sent"
   }
-  return isAdmin ? "Draft" : "Sent"
+  return name
 }
 
 export function getStageColor(stageName: string, isRejected?: boolean): string {

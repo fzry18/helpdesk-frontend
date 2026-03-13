@@ -11,7 +11,7 @@ import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { useInView } from 'react-intersection-observer'
 import { usePrefetchTicket } from "@/hooks/use-ticket-queries"
-import { useAuthStore } from "@/store/authStore"
+import { useAuthStore } from "@/features/auth/stores/auth.store"
 
 interface TicketCardProps {
   ticket: Ticket
@@ -144,25 +144,26 @@ const TicketCardComponent = ({ ticket, index = 0 }: TicketCardProps) => {
     prefetchTicket(ticket.id)
   }, [prefetchTicket, ticket.id])
 
-  const isAdmin = useAuthStore((s) => s.isAdmin)
+  const isAdminUser = useAuthStore((s) => s.isAdmin)
   const priorityConfig = getPriorityConfig(ticket.priority)
   
   // Get stage name - handle all possible cases
   const stageName = (() => {
-    // Check stage object first
+    let name = ""
     if (ticket.stage && typeof ticket.stage === "object" && ticket.stage.name) {
-      return ticket.stage.name
+      name = ticket.stage.name
+    } else if (ticket.stage_name) {
+      name = ticket.stage_name
+    } else if (typeof ticket.stage === "string" && ticket.stage) {
+      name = ticket.stage
+    } else {
+      name = "Draft"
     }
-    // Fallback to stage_name
-    if (ticket.stage_name) {
-      return ticket.stage_name
+    // User sees "Sent" instead of "Draft"
+    if (!isAdminUser() && name.toLowerCase() === "draft") {
+      return "Sent"
     }
-    // If stage is a string directly
-    if (typeof ticket.stage === "string" && ticket.stage) {
-      return ticket.stage
-    }
-    // Fallback based on role: admin sees "Draft", user sees "Sent"
-    return isAdmin() ? "Draft" : "Sent"
+    return name
   })()
   
   // Override stage name if rejected

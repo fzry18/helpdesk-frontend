@@ -71,13 +71,13 @@ export function parsePriority(val: string | undefined | null): TicketPriority {
 function deriveStageFromStatus(status: TicketStatus, isRejected?: boolean | null): { id: number; name: string } {
   if (isRejected) return { id: 0, name: "Rejected" }
   switch (status) {
-    case "OPEN": return { id: 0, name: "Sent" }
+    case "OPEN": return { id: 0, name: "Draft" }
     case "IN_PROGRESS": return { id: 0, name: "In Progress" }
     case "WAITING_CONFIRMATION": return { id: 0, name: "Waiting Confirmation" }
     case "RESOLVED": return { id: 0, name: "Resolved" }
     case "CLOSED": return { id: 0, name: "Closed" }
     case "REJECTED": return { id: 0, name: "Rejected" }
-    default: return { id: 0, name: "Sent" }
+    default: return { id: 0, name: "Draft" }
   }
 }
 

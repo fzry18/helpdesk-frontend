@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { useAuthStore } from "@/store/authStore"
+import { useAuthStore } from "@/features/auth/stores/auth.store"
 import { TicketList } from "@/components/helpdesk/tickets/TicketList"
 import { TicketFilters, type TicketFilterValues } from "@/components/helpdesk/tickets/TicketFilters"
 import { CreateTicketDialog } from "@/components/helpdesk/tickets/create/CreateTicketDialog"
