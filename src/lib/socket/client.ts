@@ -3,24 +3,32 @@
  *
  * Membuat satu instance Socket.io yang dapat di-reuse di seluruh aplikasi.
  * Token diambil dari localStorage saat koneksi pertama kali dibuat.
+ *
+ * PENTING: Socket client HARUS mengikuti browser origin aktif, bukan env.
+ * Jika browser load dari https://domain.com, socket harus connect ke https://domain.com
+ * Jangan hardcode localhost jika browser sedang access domain lain.
  */
 import { io, Socket } from "socket.io-client"
 
 function resolveSocketUrl(): string {
-  if (process.env.NEXT_PUBLIC_SOCKET_URL) {
-    return process.env.NEXT_PUBLIC_SOCKET_URL
-  }
-
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL
-  if (apiBaseUrl) {
-    return apiBaseUrl.replace("/api/helpdesk", "")
-  }
-
+  // Priority 1: Browser origin (PRODUCTION & CROSS-DOMAIN TESTING)
   if (typeof window !== "undefined" && window.location?.origin) {
     return window.location.origin
   }
 
-  return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+  // Priority 2: Explicit env (untuk edge case SSR/build time)
+  if (process.env.NEXT_PUBLIC_SOCKET_URL) {
+    return process.env.NEXT_PUBLIC_SOCKET_URL
+  }
+
+  // Priority 3: API base URL
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL
+  if (apiBaseUrl && !apiBaseUrl.startsWith("/")) {
+    return apiBaseUrl.replace("/api/helpdesk", "")
+  }
+
+  // Fallback: localhost (dev only)
+  return "http://localhost:3000"
 }
 
 let socketInstance: Socket | null = null
