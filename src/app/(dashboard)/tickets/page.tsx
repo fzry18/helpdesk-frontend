@@ -41,7 +41,7 @@ export default function TicketsPage() {
           search: debouncedSearch || undefined,
         })
         console.log('Tickets fetched successfully:', response)
-        console.log('Total tickets:', response.data?.total)
+        console.log('Total tickets:', response.meta?.total)
         return response
       } catch (error: any) {
         console.error('=== ERROR FETCHING TICKETS ===')

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { useAuthStore } from "@/store/authStore"
 import { Sidebar } from "@/components/layout/Sidebar"
 import { Navbar } from "@/components/layout/Navbar"
+import { authAPI } from "@/lib/api/endpoints"
 
 export default function DashboardLayout({
   children,
@@ -12,7 +13,7 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const router = useRouter()
-  const { isAuthenticated } = useAuthStore()
+  const { isAuthenticated, setAuth } = useAuthStore()
   const [isHydrated, setIsHydrated] = useState(false)
   const [hasToken, setHasToken] = useState(false)
 
@@ -23,11 +24,29 @@ export default function DashboardLayout({
     setHasToken(!!token)
     setIsHydrated(true)
 
-    console.log('=== Layout Auth Check ===')
-    console.log('isAuthenticated (store):', isAuthenticated)
-    console.log('hasToken (localStorage):', !!token)
-    console.log('isHydrated:', true)
-  }, [isAuthenticated])
+    // Auto-sync roles & user profile from backend
+    if (token) {
+      authAPI
+        .me()
+        .then((res: any) => {
+          const body = res?.data || res
+          if (body?.success && body?.data) {
+            const { employee, roles, permissions } = body.data
+            setAuth({
+              employee: {
+                ...employee,
+                roles: roles || employee?.roles || [],
+                permissions: permissions || employee?.permissions || [],
+              },
+              accessToken: token,
+            })
+          }
+        })
+        .catch((err) => {
+          console.warn("Auth sync failed:", err)
+        })
+    }
+  }, [setAuth])
 
   // Redirect hanya setelah hydrated DAN tidak ada token
   useEffect(() => {

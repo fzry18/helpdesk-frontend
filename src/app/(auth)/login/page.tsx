@@ -15,11 +15,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { toast } from "@/hooks/use-toast"
 import { Loader2 } from "lucide-react"
 
-// Validasi NIK: harus tepat 4 digit angka
+// Validasi NIK lengkap, format contoh: "1.1025.274"
 const loginSchema = z.object({
-  login: z.string()
-    .length(4, "NIK harus tepat 4 digit")
-    .regex(/^\d{4}$/, "NIK harus berupa 4 digit angka"),
+  nik: z.string()
+    .min(1, "NIK harus diisi")
+    .regex(/^[\d.]+$/, "NIK hanya boleh berisi angka dan titik"),
   password: z.string().min(1, "Password harus diisi"),
 })
 
@@ -27,9 +27,9 @@ type LoginFormData = z.infer<typeof loginSchema>
 
 // Error messages dalam Bahasa Indonesia
 const errorMessages: Record<string, string> = {
-  INVALID_LOGIN_FORMAT: 'Format login tidak valid. Gunakan 4 digit terakhir NIK.',
-  NIK_NOT_FOUND: 'NIK tidak ditemukan. Pastikan Anda memasukkan 4 digit terakhir NIK dengan benar.',
-  NO_HELPDESK_PASSWORD: 'Anda belum memiliki password helpdesk. Hubungi administrator.',
+  INVALID_LOGIN_FORMAT: 'Format NIK tidak valid.',
+  NIK_NOT_FOUND: 'NIK tidak ditemukan. Pastikan NIK Anda benar.',
+  NO_HELPDESK_PASSWORD: 'Anda belum memiliki password. Hubungi administrator IT.',
   INVALID_HELPDESK_PASSWORD: 'Password salah. Silakan coba lagi.',
   NETWORK_ERROR: 'Terjadi kesalahan jaringan. Periksa koneksi internet Anda.',
   SERVER_ERROR: 'Terjadi kesalahan pada server. Silakan coba beberapa saat lagi.',
@@ -43,7 +43,7 @@ const getErrorMessage = (error: any): string => {
   if (error.message === 'Network Error') {
     return errorMessages.NETWORK_ERROR
   }
-  return error.response?.data?.message || errorMessages.SERVER_ERROR
+  return error.response?.data?.message || error.message || errorMessages.SERVER_ERROR
 }
 
 export default function LoginPage() {
@@ -63,11 +63,17 @@ export default function LoginPage() {
     mutationFn: (data: LoginFormData) => authAPI.login(data),
     onSuccess: (response) => {
       if (response.success && response.data) {
-        const { employee, access_token } = response.data
+        const { employee, access_token, roles, permissions } = response.data
 
-        // Set auth dengan employee (bukan user!)
+        // Enrich employee with roles/permissions
+        const enrichedEmployee = {
+          ...employee,
+          roles,
+          permissions,
+        }
+
         setAuth({
-          employee,
+          employee: enrichedEmployee,
           accessToken: access_token,
         })
 
@@ -107,29 +113,26 @@ export default function LoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="login">NIK (4 digit terakhir)</Label>
+              <Label htmlFor="nik">NIK (Nomor Induk Karyawan)</Label>
               <Input
-                id="login"
+                id="nik"
                 type="text"
-                placeholder="Contoh: 6049"
-                maxLength={4}
-                inputMode="numeric"
-                pattern="\d{4}"
-                {...register("login")}
+                placeholder="Contoh: 1.1025.274"
+                {...register("nik")}
                 disabled={isLoading}
-                className={errors.login ? "border-destructive" : ""}
+                className={errors.nik ? "border-destructive" : ""}
               />
-              {errors.login && (
-                <p className="text-sm text-destructive">{errors.login.message}</p>
+              {errors.nik && (
+                <p className="text-sm text-destructive">{errors.nik.message}</p>
               )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password Helpdesk</Label>
+              <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
                 type="password"
-                placeholder="Masukkan password helpdesk"
+                placeholder="Masukkan password"
                 {...register("password")}
                 disabled={isLoading}
                 className={errors.password ? "border-destructive" : ""}
@@ -152,12 +155,11 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-4 text-center text-sm text-muted-foreground">
-            <p>Gunakan 4 digit terakhir NIK Anda untuk login</p>
-            <p className="mt-1 text-xs">Contoh NIK: 81.0525.6049 → Login: 6049</p>
+            <p>Gunakan NIK lengkap Anda untuk login</p>
+            <p className="mt-1 text-xs">Contoh: 1.1025.274</p>
           </div>
         </CardContent>
       </Card>
     </div>
   )
 }
-

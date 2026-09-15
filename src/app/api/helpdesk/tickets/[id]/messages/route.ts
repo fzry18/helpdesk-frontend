@@ -1,0 +1,188 @@
+import { NextRequest, NextResponse } from "next/server"
+import { verifyRequest } from "@/lib/serverAuth"
+import { prisma } from "@/lib/prisma"
+import { getRealtimeBus } from "@/lib/realtime"
+
+export const dynamic = "force-dynamic"
+export const runtime = "nodejs"
+
+/**
+ * GET /api/helpdesk/tickets/[id]/messages - List messages for a ticket
+ * Also serves as /api/helpdesk/tickets/[id]/thread (same data)
+ */
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const payload = verifyRequest(request.headers.get("authorization"))
+  if (!payload) {
+    return NextResponse.json(
+      { success: false, message: "Unauthorized" },
+      { status: 401 }
+    )
+  }
+
+  const { id } = await params
+  const ticketId = parseInt(id)
+
+  try {
+    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } })
+    if (!ticket) {
+      return NextResponse.json(
+        { success: false, message: "Ticket tidak ditemukan." },
+        { status: 404 }
+      )
+    }
+
+    // RBAC check
+    const canViewAll = payload.permissions.includes("ticket:view_all")
+    if (!canViewAll && ticket.createdById !== payload.employeeId) {
+      return NextResponse.json(
+        { success: false, message: "Akses ditolak." },
+        { status: 403 }
+      )
+    }
+
+    // Users should not see internal messages
+    const isStaff = payload.permissions.includes("ticket:internal_note")
+
+    const messages = await prisma.ticketMessage.findMany({
+      where: {
+        ticketId,
+        ...(isStaff ? {} : { internal: false }),
+      },
+      include: {
+        author: { select: { id: true, name: true, email: true } },
+        attachments: true,
+      },
+      orderBy: { createdAt: "asc" },
+    })
+
+    const mapped = messages.map((m) => ({
+      id: m.id,
+      body: m.body,
+      body_plain: m.body.replace(/<[^>]+>/g, "").trim(),
+      author: m.author
+        ? { id: m.author.id, name: m.author.name, email: m.author.email }
+        : null,
+      date: m.createdAt.toISOString(),
+      create_date: m.createdAt.toISOString(),
+      is_internal: m.internal,
+      attachments: m.attachments.map((a) => ({
+        id: a.id,
+        name: a.filename,
+        mimetype: a.mimetype,
+        file_size: a.fileSize,
+        url: a.fileUrl,
+      })),
+    }))
+
+    return NextResponse.json({ success: true, data: mapped })
+  } catch (error) {
+    console.error("[Messages List] Error:", error)
+    return NextResponse.json(
+      { success: false, message: "Internal server error" },
+      { status: 500 }
+    )
+  }
+}
+
+/**
+ * POST /api/helpdesk/tickets/[id]/messages - Send a message
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const payload = verifyRequest(request.headers.get("authorization"))
+  if (!payload) {
+    return NextResponse.json(
+      { success: false, message: "Unauthorized" },
+      { status: 401 }
+    )
+  }
+
+  const { id } = await params
+  const ticketId = parseInt(id)
+
+  try {
+    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } })
+    if (!ticket) {
+      return NextResponse.json(
+        { success: false, message: "Ticket tidak ditemukan." },
+        { status: 404 }
+      )
+    }
+
+    const body = await request.json()
+    const { body: messageBody, internal = false } = body
+
+    if (!messageBody || messageBody.trim() === "") {
+      return NextResponse.json(
+        { success: false, message: "Pesan tidak boleh kosong." },
+        { status: 400 }
+      )
+    }
+
+    // Only staff can send internal notes
+    if (internal && !payload.permissions.includes("ticket:internal_note")) {
+      return NextResponse.json(
+        { success: false, message: "Tidak memiliki izin untuk internal note." },
+        { status: 403 }
+      )
+    }
+
+    const message = await prisma.ticketMessage.create({
+      data: {
+        ticketId,
+        authorId: payload.employeeId,
+        body: messageBody,
+        internal,
+      },
+      include: {
+        author: { select: { id: true, name: true, email: true } },
+      },
+    })
+
+    // Update ticket updatedAt
+    await prisma.ticket.update({
+      where: { id: ticketId },
+      data: { updatedAt: new Date() },
+    })
+
+    // Publish SSE event via realtime bus
+    const bus = getRealtimeBus()
+    const ssePayload = JSON.stringify({
+      type: "new_message",
+      data: {
+        id: message.id,
+        body: message.body,
+        body_plain: message.body.replace(/<[^>]+>/g, "").trim(),
+        author: message.author
+          ? { id: message.author.id, name: message.author.name, email: message.author.email }
+          : null,
+        date: message.createdAt.toISOString(),
+        create_date: message.createdAt.toISOString(),
+        is_internal: message.internal,
+      },
+    })
+    bus.publish(`ticket:${ticketId}`, ssePayload)
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        id: message.id,
+        body: message.body,
+        author: message.author,
+        date: message.createdAt.toISOString(),
+        is_internal: message.internal,
+      },
+    })
+  } catch (error) {
+    console.error("[Messages Post] Error:", error)
+    return NextResponse.json(
+      { success: false, message: "Internal server error" },
+      { status: 500 }
+    )
+  }
+}

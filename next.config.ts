@@ -1,18 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // reactCompiler: true, // Disabled - requires babel-plugin-react-compiler
+  // API routes are now local Next.js Route Handlers (no Odoo proxy needed)
+  // Auth is proxied to Odoo Live from within Route Handlers (BFF pattern)
 
-  async rewrites() {
-    return [
-      // All API routes: /api/* -> http://localhost:8072/api/*
-      {
-        source: "/api/:path*",
-        destination: "http://localhost:8072/api/:path*",
-      },
-    ]
-  },
+  serverExternalPackages: ["@prisma/client"],
 };
 
 export default nextConfig;
-

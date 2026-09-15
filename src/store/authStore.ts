@@ -18,8 +18,16 @@ interface AuthState {
   getDepartment: () => string
   // Helper untuk mendapatkan job title
   getJobTitle: () => string
-  // Helper untuk cek apakah manager
+  // Helper untuk cek apakah manager (ADMIN_IT_SUPPORT atau SUPER_ADMIN)
   isManager: () => boolean
+  // Helper untuk cek role
+  hasRole: (role: string) => boolean
+  // Helper untuk cek permission
+  hasPermission: (permission: string) => boolean
+  // Get all roles
+  getRoles: () => string[]
+  // Get all permissions
+  getPermissions: () => string[]
   logout: () => void
 }
 
@@ -45,9 +53,6 @@ export const useAuthStore = create<AuthState>()(
       },
       getDisplayIdentifier: () => {
         const state = get()
-        if (state.employee?.helpdesk_username) {
-          return `NIK: ...${state.employee.helpdesk_username}`
-        }
         return state.employee?.nik || ''
       },
       getDepartment: () => {
@@ -60,11 +65,37 @@ export const useAuthStore = create<AuthState>()(
       },
       isManager: () => {
         const state = get()
-        return state.employee?.is_manager ?? false
+        const roles = state.employee?.roles || []
+        return (
+          state.employee?.is_manager === true ||
+          roles.includes("SUPER_ADMIN") ||
+          roles.includes("ADMIN_IT_SUPPORT")
+        )
+      },
+      hasRole: (role: string) => {
+        const state = get()
+        const roles = state.employee?.roles || []
+        return roles.includes(role)
+      },
+      hasPermission: (permission: string) => {
+        const state = get()
+        const perms = state.employee?.permissions || []
+        // Super admin has all permissions
+        if (state.employee?.roles?.includes("SUPER_ADMIN")) return true
+        return perms.includes(permission)
+      },
+      getRoles: () => {
+        const state = get()
+        return state.employee?.roles || []
+      },
+      getPermissions: () => {
+        const state = get()
+        return state.employee?.permissions || []
       },
       logout: () => {
         if (typeof window !== "undefined") {
           localStorage.removeItem("access_token")
+          localStorage.removeItem("refresh_token")
         }
         set({
           employee: null,
@@ -78,4 +109,3 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 )
-

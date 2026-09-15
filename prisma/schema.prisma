@@ -1,0 +1,191 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Karyawan (tersinkronisasi saat login dari Odoo Live)
+model Employee {
+  id            Int             @id
+  nik           String          @unique // NIK Lengkap, contoh "1.1025.274"
+  name          String
+  email         String?
+  phone         String?
+  departmentId  Int?
+  department    String?
+  jobTitle      String?
+  operatingUnit String?
+  isSuperAdmin  Boolean         @default(false)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  createdTickets  Ticket[]        @relation("CreatedTickets")
+  assignedTickets Ticket[]        @relation("AssignedTickets")
+  messages        TicketMessage[]
+  userRoles       UserRole[]
+  loginLogs       LoginLog[]
+
+  @@map("employees")
+}
+
+// RBAC Lokal (SUPER_ADMIN, ADMIN_IT_SUPPORT, IT_SUPPORT, USER)
+model Role {
+  id          Int              @id @default(autoincrement())
+  name        String           @unique
+  slug        String           @unique
+  description String?
+  userRoles   UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id    Int              @id @default(autoincrement())
+  name  String           @unique
+  slug  String           @unique
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       Int
+  permissionId Int
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  employeeId Int
+  roleId     Int
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([employeeId, roleId])
+  @@map("user_roles")
+}
+
+// Master Data
+model Category {
+  id       Int      @id @default(autoincrement())
+  name     String   @unique
+  sequence Int      @default(10)
+  tickets  Ticket[]
+
+  @@map("categories")
+}
+
+model Stage {
+  id         Int      @id @default(autoincrement())
+  name       String   @unique
+  sequence   Int      @default(10)
+  isStarting Boolean  @default(false)
+  isClosing  Boolean  @default(false)
+  tickets    Ticket[]
+
+  @@map("stages")
+}
+
+model Team {
+  id      Int          @id @default(autoincrement())
+  name    String       @unique
+  email   String?
+  tickets Ticket[]
+  members TeamMember[]
+
+  @@map("teams")
+}
+
+model TeamMember {
+  teamId     Int
+  employeeId Int
+  team       Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@id([teamId, employeeId])
+  @@map("team_members")
+}
+
+// Tiket & Percakapan Realtime
+model Ticket {
+  id                      Int             @id @default(autoincrement())
+  ticketNumber            String          @unique
+  subject                 String
+  description             String
+  priority                String          @default("1")
+  status                  String          @default("open")
+  waitingUserConfirmation Boolean         @default(false)
+  resolutionConfirmed     Boolean         @default(false)
+  satisfactionRating      String?
+  feedback                String?
+
+  categoryId   Int?
+  stageId      Int?
+  teamId       Int?
+  createdById  Int
+  assignedToId Int?
+
+  category   Category?  @relation(fields: [categoryId], references: [id])
+  stage      Stage?     @relation(fields: [stageId], references: [id])
+  team       Team?      @relation(fields: [teamId], references: [id])
+  createdBy  Employee   @relation("CreatedTickets", fields: [createdById], references: [id])
+  assignedTo Employee?  @relation("AssignedTickets", fields: [assignedToId], references: [id])
+
+  messages    TicketMessage[]
+  attachments Attachment[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@map("tickets")
+}
+
+model TicketMessage {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int
+  authorId  Int
+  body      String
+  internal  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  ticket      Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author      Employee     @relation(fields: [authorId], references: [id])
+  attachments Attachment[]
+
+  @@map("ticket_messages")
+}
+
+model Attachment {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int?
+  messageId Int?
+  filename  String
+  fileUrl   String
+  fileSize  Int
+  mimetype  String
+  createdAt DateTime @default(now())
+
+  ticket  Ticket?        @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  message TicketMessage? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@map("attachments")
+}
+
+model LoginLog {
+  id         Int      @id @default(autoincrement())
+  employeeId Int
+  nik        String
+  name       String
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("login_logs")
+}

@@ -3,17 +3,32 @@
 import { use, useRef, useEffect } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { ticketAPI, messageAPI } from "@/lib/api/endpoints"
+import { apiClient } from "@/lib/api/client"
 import { useAuthStore } from "@/store/authStore"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { formatDate } from "@/lib/utils"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { toast } from "@/hooks/use-toast"
-import { ArrowLeft, Send, CheckCircle, MessageSquare } from "lucide-react"
+import {
+  ArrowLeft,
+  Send,
+  CheckCircle,
+  MessageSquare,
+  UserCheck,
+  GitBranch,
+} from "lucide-react"
 import Link from "next/link"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -32,7 +47,7 @@ export default function TicketDetailPage({
   const { id } = use(params)
   const ticketId = parseInt(id)
   const queryClient = useQueryClient()
-  const { isManager } = useAuthStore()
+  const { isManager, hasRole } = useAuthStore()
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const { data: ticketData, isLoading: ticketLoading, error: ticketError } = useQuery({
@@ -44,6 +59,71 @@ export default function TicketDetailPage({
     queryKey: ["ticket", ticketId, "thread"],
     queryFn: () => messageAPI.getThread(ticketId),
     enabled: !!ticketId,
+  })
+
+  // Fetch stages for stage switcher
+  const { data: stagesData } = useQuery({
+    queryKey: ["admin-stages"],
+    queryFn: async () => {
+      const res = await apiClient.get<{ success: boolean; data: any[] }>("/stages")
+      return res.data || []
+    },
+    enabled: !!ticketId,
+  })
+
+  // Fetch technicians for assignee switcher
+  const { data: techData } = useQuery({
+    queryKey: ["admin-techs"],
+    queryFn: async () => {
+      const res = await apiClient.get<{ success: boolean; data: any[] }>("/users")
+      return res.data || []
+    },
+    enabled: !!ticketId,
+  })
+
+  const updateStageMutation = useMutation({
+    mutationFn: (stageId: number) => ticketAPI.updateStage(ticketId, stageId),
+    onSuccess: () => {
+      toast({ title: "Status Tahapan Berhasil Diperbarui" })
+      queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] })
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Gagal Mengubah Status",
+        description: err.response?.data?.message || err.message,
+        variant: "destructive",
+      })
+    },
+  })
+
+  const assignUserMutation = useMutation({
+    mutationFn: (userId: number) => ticketAPI.assignUser(ticketId, userId),
+    onSuccess: () => {
+      toast({ title: "Penugasan Teknisi Berhasil" })
+      queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] })
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Gagal Menugaskan",
+        description: err.response?.data?.message || err.message,
+        variant: "destructive",
+      })
+    },
+  })
+
+  const assignToMeMutation = useMutation({
+    mutationFn: () => ticketAPI.assignToMe(ticketId),
+    onSuccess: () => {
+      toast({ title: "Tiket Berhasil Ditugaskan ke Anda" })
+      queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] })
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Gagal Menugaskan",
+        description: err.response?.data?.message || err.message,
+        variant: "destructive",
+      })
+    },
   })
 
   const messages = (threadData?.data && Array.isArray(threadData.data) ? threadData.data : []) as Array<{
@@ -89,7 +169,7 @@ export default function TicketDetailPage({
   })
 
   const requestConfirmationMutation = useMutation({
-    mutationFn: (message?: string) => ticketAPI.requestConfirmation(ticketId, message),
+    mutationFn: (message?: string | void) => ticketAPI.requestConfirmation(ticketId, message || undefined),
     onSuccess: () => {
       toast({ title: "Permintaan konfirmasi terkirim ke user" })
       queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] })
@@ -193,7 +273,11 @@ export default function TicketDetailPage({
   }
 
   const priorityConfig = getPriorityConfig(String(ticket.priority))
-  const isAdmin = isManager()
+  const isAdmin =
+    isManager() ||
+    hasRole("SUPER_ADMIN") ||
+    hasRole("ADMIN_IT_SUPPORT") ||
+    hasRole("IT_SUPPORT")
   const isClosed = ticket.stage?.name?.toLowerCase().includes("closed") || ticket.resolution_confirmed
   const waitingConfirmation = ticket.waiting_user_confirmation && !ticket.resolution_confirmed
 
@@ -206,17 +290,25 @@ export default function TicketDetailPage({
             Kembali ke Daftar Tiket
           </Button>
         </Link>
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="flex-1 space-y-1">
-            <h1 className="text-3xl font-bold">{ticket.subject}</h1>
-            <p className="text-sm text-muted-foreground">#{ticket.ticket_number}</p>
+
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold tracking-tight">{ticket.subject}</h1>
+              <Badge className={priorityConfig.color}>{priorityConfig.label}</Badge>
+            </div>
+            <p className="text-sm text-muted-foreground mt-1">
+              Tiket #{ticket.id} · Dibuat oleh {ticket.customer?.name || ticket.customer_name || "User"} pada {formatDate(ticket.create_date)}
+            </p>
             <div className="flex flex-wrap gap-2 mt-2">
-              <Badge variant="outline" className={priorityConfig.color}>
-                {ticket.priority_label || priorityConfig.label}
-              </Badge>
+              {ticket.stage?.name && (
+                <Badge variant="outline" className="bg-sky-50 text-sky-700 border-sky-200">
+                  {ticket.stage.name}
+                </Badge>
+              )}
               {ticket.ticket_category_type && (
-                <Badge variant="secondary">
-                  {ticket.ticket_category_type === "helper" ? "Ticketing Helper" : "Ticketing System"}
+                <Badge variant="secondary" className="capitalize">
+                  {ticket.ticket_category_type}
                   {ticket.system_category && ` · ${ticket.system_category}`}
                 </Badge>
               )}
@@ -241,24 +333,91 @@ export default function TicketDetailPage({
             </CardContent>
           </Card>
 
-          {/* Admin: Request User Confirmation */}
+          {/* Panel Aksi Admin & IT Support */}
           {isAdmin && !isClosed && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Aksi Admin</CardTitle>
+            <Card className="border-primary/30 bg-primary/[0.02]">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <UserCheck className="h-5 w-5 text-primary" />
+                  Panel Aksi IT & Dispatcher
+                </CardTitle>
               </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Jika perbaikan sudah selesai, minta konfirmasi dari pembuat ticket.
-                </p>
-                <Button
-                  variant="outline"
-                  onClick={() => requestConfirmationMutation.mutate()}
-                  disabled={requestConfirmationMutation.isPending}
-                >
-                  <CheckCircle className="mr-2 h-4 w-4" />
-                  Minta Konfirmasi User
-                </Button>
+              <CardContent className="space-y-4">
+                {/* 1. Ganti Stage */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                    <GitBranch className="h-3.5 w-3.5 text-primary" />
+                    Ubah Status / Tahapan Tiket
+                  </label>
+                  <Select
+                    value={ticket.stage?.id ? String(ticket.stage.id) : undefined}
+                    onValueChange={(val) => updateStageMutation.mutate(parseInt(val))}
+                    disabled={updateStageMutation.isPending}
+                  >
+                    <SelectTrigger className="w-full h-9">
+                      <SelectValue placeholder="Pilih status/stage" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {stagesData?.map((s: any) => (
+                        <SelectItem key={s.id} value={String(s.id)}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* 2. Tugaskan Teknisi */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                    <UserCheck className="h-3.5 w-3.5 text-primary" />
+                    Tugaskan ke Teknisi IT Support
+                  </label>
+                  <div className="flex gap-2">
+                    <Select
+                      value={ticket.assigned_user?.id ? String(ticket.assigned_user.id) : undefined}
+                      onValueChange={(val) => assignUserMutation.mutate(parseInt(val))}
+                      disabled={assignUserMutation.isPending}
+                    >
+                      <SelectTrigger className="flex-1 h-9">
+                        <SelectValue placeholder="Pilih teknisi IT..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {techData?.map((t: any) => (
+                          <SelectItem key={t.id} value={String(t.id)}>
+                            {t.name} ({t.nik})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => assignToMeMutation.mutate()}
+                      disabled={assignToMeMutation.isPending}
+                      className="text-xs h-9 shrink-0"
+                    >
+                      Ke Saya
+                    </Button>
+                  </div>
+                </div>
+
+                {/* 3. Minta Konfirmasi User */}
+                <div className="pt-2 border-t flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    Perbaikan sudah selesai? Minta konfirmasi penyelesaian dari user:
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => requestConfirmationMutation.mutate()}
+                    disabled={requestConfirmationMutation.isPending}
+                    className="h-8 text-xs gap-1.5"
+                  >
+                    <CheckCircle className="h-3.5 w-3.5 text-primary" />
+                    Minta Konfirmasi User
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           )}

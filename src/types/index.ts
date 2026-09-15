@@ -10,10 +10,12 @@ export interface Employee {
   email: string
   phone: string
   is_manager?: boolean
+  roles?: string[]
+  permissions?: string[]
 }
 
 export interface LoginRequest {
-  login: string  // 4 digit terakhir NIK
+  nik: string  // NIK Lengkap, contoh: "1.1025.274"
   password: string
 }
 
@@ -22,8 +24,9 @@ export interface LoginResponse {
   data: {
     access_token: string
     token_type: string
-    expires_in: number
     employee: Employee
+    roles: string[]
+    permissions: string[]
   }
 }
 
