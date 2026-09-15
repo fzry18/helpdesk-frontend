@@ -167,7 +167,11 @@ export const messageAPI = {
 
   postMessage: (
     ticketId: number,
-    data: { body: string; internal?: boolean }
+    data: {
+      body: string
+      internal?: boolean
+      attachments?: Array<{ filename: string; file_data: string }>
+    }
   ) =>
     apiClient.post<ApiResponse<Message>>(
       `/tickets/${ticketId}/messages`,

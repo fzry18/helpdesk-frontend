@@ -96,7 +96,7 @@ export async function GET(
           filename: a.filename,
           mimetype: a.mimetype,
           file_size: a.fileSize,
-          url: a.fileUrl,
+          url: `/api/helpdesk/attachments/${a.id}`,
         })),
         create_date: ticket.createdAt.toISOString(),
         write_date: ticket.updatedAt.toISOString(),

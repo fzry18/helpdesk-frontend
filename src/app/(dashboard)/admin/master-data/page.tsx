@@ -33,6 +33,7 @@ import {
   Loader2,
   FolderOpen,
   UserPlus,
+  Pencil,
   Trash2,
 } from "lucide-react"
 
@@ -83,7 +84,18 @@ export default function MasterDataPage() {
   const [modalType, setModalType] = useState<"category" | "team" | "stage" | null>(
     null
   )
+  const [editingItem, setEditingItem] = useState<{
+    id: number
+    type: "category" | "team" | "stage"
+  } | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{
+    type: "category" | "team" | "stage"
+    id: number
+    name: string
+  } | null>(null)
+
   const [nameInput, setNameInput] = useState("")
+  const [sequenceInput, setSequenceInput] = useState<number>(10)
   const [extraInput, setExtraInput] = useState("")
   const [isStarting, setIsStarting] = useState(false)
   const [isClosing, setIsClosing] = useState(false)
@@ -163,56 +175,122 @@ export default function MasterDataPage() {
     },
   })
 
-  // Create Category Mutation
-  const createCategoryMutation = useMutation({
-    mutationFn: (payload: { name: string; sequence: number }) =>
-      apiClient.post<any>("/categories", payload),
-    onSuccess: () => {
-      toast({ title: "Berhasil", description: "Kategori baru berhasil dibuat." })
+  // Create / Update Category Mutation
+  const saveCategoryMutation = useMutation({
+    mutationFn: (payload: { id?: number; name: string; sequence: number }) => {
+      if (payload.id) {
+        return apiClient.put<any>("/categories", payload)
+      }
+      return apiClient.post<any>("/categories", payload)
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "Berhasil",
+        description: data?.message || "Kategori berhasil disimpan.",
+      })
       setModalType(null)
+      setEditingItem(null)
       setNameInput("")
       queryClient.invalidateQueries({ queryKey: ["admin-master-data"] })
     },
     onError: (err: any) => {
       toast({
-        title: "Gagal Membuat Kategori",
+        title: "Gagal Menyimpan Kategori",
         description: err.response?.data?.message || err.message,
         variant: "destructive",
       })
     },
   })
 
-  // Create Team Mutation
-  const createTeamMutation = useMutation({
-    mutationFn: (payload: { name: string; email?: string }) =>
-      apiClient.post<any>("/teams", payload),
-    onSuccess: () => {
-      toast({ title: "Berhasil", description: "Tim baru berhasil dibuat." })
+  // Delete Category Mutation
+  const deleteCategoryMutation = useMutation({
+    mutationFn: (id: number) => apiClient.delete<any>(`/categories?id=${id}`),
+    onSuccess: (data: any) => {
+      toast({
+        title: "Berhasil",
+        description: data?.message || "Kategori berhasil dihapus.",
+      })
+      setDeleteTarget(null)
+      queryClient.invalidateQueries({ queryKey: ["admin-master-data"] })
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Gagal Menghapus Kategori",
+        description: err.response?.data?.message || err.message,
+        variant: "destructive",
+      })
+    },
+  })
+
+  // Create / Update Team Mutation
+  const saveTeamMutation = useMutation({
+    mutationFn: (payload: { id?: number; name: string; email?: string }) => {
+      if (payload.id) {
+        return apiClient.put<any>("/teams", payload)
+      }
+      return apiClient.post<any>("/teams", payload)
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "Berhasil",
+        description: data?.message || "Tim berhasil disimpan.",
+      })
       setModalType(null)
+      setEditingItem(null)
       setNameInput("")
       setExtraInput("")
       queryClient.invalidateQueries({ queryKey: ["admin-master-data"] })
     },
     onError: (err: any) => {
       toast({
-        title: "Gagal Membuat Tim",
+        title: "Gagal Menyimpan Tim",
         description: err.response?.data?.message || err.message,
         variant: "destructive",
       })
     },
   })
 
-  // Create Stage Mutation
-  const createStageMutation = useMutation({
+  // Delete Team Mutation
+  const deleteTeamMutation = useMutation({
+    mutationFn: (id: number) => apiClient.delete<any>(`/teams?id=${id}`),
+    onSuccess: (data: any) => {
+      toast({
+        title: "Berhasil",
+        description: data?.message || "Tim berhasil dihapus.",
+      })
+      setDeleteTarget(null)
+      queryClient.invalidateQueries({ queryKey: ["admin-master-data"] })
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Gagal Menghapus Tim",
+        description: err.response?.data?.message || err.message,
+        variant: "destructive",
+      })
+    },
+  })
+
+  // Create / Update Stage Mutation
+  const saveStageMutation = useMutation({
     mutationFn: (payload: {
+      id?: number
       name: string
       sequence: number
       is_starting: boolean
       is_closing: boolean
-    }) => apiClient.post<any>("/stages", payload),
-    onSuccess: () => {
-      toast({ title: "Berhasil", description: "Tahapan tiket baru berhasil dibuat." })
+    }) => {
+      if (payload.id) {
+        return apiClient.put<any>("/stages", payload)
+      }
+      return apiClient.post<any>("/stages", payload)
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "Berhasil",
+        description: data?.message || "Tahapan tiket berhasil disimpan.",
+      })
       setModalType(null)
+      setEditingItem(null)
       setNameInput("")
       setIsStarting(false)
       setIsClosing(false)
@@ -220,7 +298,27 @@ export default function MasterDataPage() {
     },
     onError: (err: any) => {
       toast({
-        title: "Gagal Membuat Tahapan",
+        title: "Gagal Menyimpan Tahapan",
+        description: err.response?.data?.message || err.message,
+        variant: "destructive",
+      })
+    },
+  })
+
+  // Delete Stage Mutation
+  const deleteStageMutation = useMutation({
+    mutationFn: (id: number) => apiClient.delete<any>(`/stages?id=${id}`),
+    onSuccess: (data: any) => {
+      toast({
+        title: "Berhasil",
+        description: data?.message || "Tahapan berhasil dihapus.",
+      })
+      setDeleteTarget(null)
+      queryClient.invalidateQueries({ queryKey: ["admin-master-data"] })
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Gagal Menghapus Tahapan",
         description: err.response?.data?.message || err.message,
         variant: "destructive",
       })
@@ -231,7 +329,55 @@ export default function MasterDataPage() {
   const teams = masterData?.teams || []
   const stages = masterData?.stages || []
 
-  // Current team when modal is active
+  // Open Create Modals
+  const openCreateCategory = () => {
+    setEditingItem(null)
+    setNameInput("")
+    setSequenceInput((categories.length + 1) * 10)
+    setModalType("category")
+  }
+
+  const openCreateTeam = () => {
+    setEditingItem(null)
+    setNameInput("")
+    setExtraInput("")
+    setModalType("team")
+  }
+
+  const openCreateStage = () => {
+    setEditingItem(null)
+    setNameInput("")
+    setSequenceInput((stages.length + 1) * 10)
+    setIsStarting(false)
+    setIsClosing(false)
+    setModalType("stage")
+  }
+
+  // Open Edit Modals
+  const openEditCategory = (c: CategoryItem) => {
+    setEditingItem({ id: c.id, type: "category" })
+    setNameInput(c.name)
+    setSequenceInput(c.sequence)
+    setModalType("category")
+  }
+
+  const openEditTeam = (t: TeamItem) => {
+    setEditingItem({ id: t.id, type: "team" })
+    setNameInput(t.name)
+    setExtraInput(t.email || "")
+    setModalType("team")
+  }
+
+  const openEditStage = (s: StageItem) => {
+    setEditingItem({ id: s.id, type: "stage" })
+    setNameInput(s.name)
+    setSequenceInput(s.sequence)
+    setIsStarting(s.is_starting)
+    setIsClosing(s.is_closing)
+    setModalType("stage")
+  }
+
+  // Current team when managing members modal is active
   const currentTeam = managingTeam
     ? teams.find((t) => t.id === managingTeam.id) || managingTeam
     : null
@@ -256,19 +402,19 @@ export default function MasterDataPage() {
         {canManage && (
           <div className="flex gap-2">
             {activeTab === "categories" && (
-              <Button onClick={() => setModalType("category")} className="gap-2">
+              <Button onClick={openCreateCategory} className="gap-2">
                 <Plus className="h-4 w-4" />
                 Tambah Kategori
               </Button>
             )}
             {activeTab === "teams" && (
-              <Button onClick={() => setModalType("team")} className="gap-2">
+              <Button onClick={openCreateTeam} className="gap-2">
                 <Plus className="h-4 w-4" />
                 Tambah Tim
               </Button>
             )}
             {activeTab === "stages" && (
-              <Button onClick={() => setModalType("stage")} className="gap-2">
+              <Button onClick={openCreateStage} className="gap-2">
                 <Plus className="h-4 w-4" />
                 Tambah Tahapan
               </Button>
@@ -340,6 +486,7 @@ export default function MasterDataPage() {
                         <th className="px-6 py-3">Urutan</th>
                         <th className="px-6 py-3">Nama Kategori</th>
                         <th className="px-6 py-3">ID Kategori</th>
+                        <th className="px-6 py-3 text-right">Aksi</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y">
@@ -352,6 +499,36 @@ export default function MasterDataPage() {
                           </td>
                           <td className="px-6 py-4 text-muted-foreground font-mono text-xs">
                             #{c.id}
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            {canManage && (
+                              <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => openEditCategory(c)}
+                                  className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                                  title="Edit Kategori"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    setDeleteTarget({
+                                      type: "category",
+                                      id: c.id,
+                                      name: c.name,
+                                    })
+                                  }
+                                  className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                  title="Hapus Kategori"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -420,15 +597,41 @@ export default function MasterDataPage() {
                           </td>
                           <td className="px-6 py-4 text-right">
                             {canManage && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setManagingTeam(t)}
-                                className="h-8 gap-1.5 text-xs font-medium"
-                              >
-                                <UserPlus className="h-3.5 w-3.5" />
-                                Kelola Anggota
-                              </Button>
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setManagingTeam(t)}
+                                  className="h-8 gap-1.5 text-xs font-medium"
+                                >
+                                  <UserPlus className="h-3.5 w-3.5" />
+                                  Kelola Anggota
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => openEditTeam(t)}
+                                  className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                                  title="Edit Tim"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    setDeleteTarget({
+                                      type: "team",
+                                      id: t.id,
+                                      name: t.name,
+                                    })
+                                  }
+                                  className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                  title="Hapus Tim"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
                             )}
                           </td>
                         </tr>
@@ -457,6 +660,7 @@ export default function MasterDataPage() {
                         <th className="px-6 py-3">Urutan</th>
                         <th className="px-6 py-3">Nama Tahapan</th>
                         <th className="px-6 py-3">Sifat Alur</th>
+                        <th className="px-6 py-3 text-right">Aksi</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y">
@@ -479,6 +683,36 @@ export default function MasterDataPage() {
                               <Badge variant="outline" className="text-muted-foreground">
                                 Dalam Proses
                               </Badge>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            {canManage && (
+                              <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => openEditStage(s)}
+                                  className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                                  title="Edit Tahapan"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    setDeleteTarget({
+                                      type: "stage",
+                                      id: s.id,
+                                      name: s.name,
+                                    })
+                                  }
+                                  className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                  title="Hapus Tahapan"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
                             )}
                           </td>
                         </tr>
@@ -613,16 +847,25 @@ export default function MasterDataPage() {
         </Dialog>
       )}
 
-      {/* Modal Tambah Kategori */}
+      {/* Modal Tambah / Edit Kategori */}
       <Dialog
         open={modalType === "category"}
-        onOpenChange={(open) => !open && setModalType(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setModalType(null)
+            setEditingItem(null)
+          }
+        }}
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Tambah Kategori Tiket Baru</DialogTitle>
+            <DialogTitle>
+              {editingItem ? "Edit Kategori Masalah" : "Tambah Kategori Tiket Baru"}
+            </DialogTitle>
             <DialogDescription>
-              Masukkan nama kategori masalah helpdesk.
+              {editingItem
+                ? "Perbarui nama dan urutan tampilan kategori masalah."
+                : "Masukkan nama dan urutan kategori masalah helpdesk."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -634,36 +877,68 @@ export default function MasterDataPage() {
                 onChange={(e) => setNameInput(e.target.value)}
               />
             </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Urutan Tampilan</label>
+              <Input
+                type="number"
+                placeholder="10"
+                value={sequenceInput}
+                onChange={(e) => setSequenceInput(parseInt(e.target.value, 10) || 10)}
+              />
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setModalType(null)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setModalType(null)
+                setEditingItem(null)
+              }}
+            >
               Batal
             </Button>
             <Button
-              disabled={!nameInput.trim() || createCategoryMutation.isPending}
+              disabled={!nameInput.trim() || saveCategoryMutation.isPending}
               onClick={() =>
-                createCategoryMutation.mutate({
+                saveCategoryMutation.mutate({
+                  id: editingItem?.id,
                   name: nameInput.trim(),
-                  sequence: (categories.length + 1) * 10,
+                  sequence: sequenceInput,
                 })
               }
             >
-              Simpan Kategori
+              {saveCategoryMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Menyimpan...
+                </>
+              ) : (
+                "Simpan Kategori"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal Tambah Tim */}
+      {/* Modal Tambah / Edit Tim */}
       <Dialog
         open={modalType === "team"}
-        onOpenChange={(open) => !open && setModalType(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setModalType(null)
+            setEditingItem(null)
+          }
+        }}
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Tambah Tim Helpdesk Baru</DialogTitle>
+            <DialogTitle>
+              {editingItem ? "Edit Tim Helpdesk" : "Tambah Tim Helpdesk Baru"}
+            </DialogTitle>
             <DialogDescription>
-              Masukkan nama tim IT dan email kontak (opsional).
+              {editingItem
+                ? "Perbarui data nama tim dan email kontak."
+                : "Masukkan nama tim IT dan email kontak (opsional)."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -685,34 +960,57 @@ export default function MasterDataPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setModalType(null)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setModalType(null)
+                setEditingItem(null)
+              }}
+            >
               Batal
             </Button>
             <Button
-              disabled={!nameInput.trim() || createTeamMutation.isPending}
+              disabled={!nameInput.trim() || saveTeamMutation.isPending}
               onClick={() =>
-                createTeamMutation.mutate({
+                saveTeamMutation.mutate({
+                  id: editingItem?.id,
                   name: nameInput.trim(),
                   email: extraInput.trim() || undefined,
                 })
               }
             >
-              Simpan Tim
+              {saveTeamMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Menyimpan...
+                </>
+              ) : (
+                "Simpan Tim"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal Tambah Tahapan */}
+      {/* Modal Tambah / Edit Tahapan */}
       <Dialog
         open={modalType === "stage"}
-        onOpenChange={(open) => !open && setModalType(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setModalType(null)
+            setEditingItem(null)
+          }
+        }}
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Tambah Tahapan Alur Tiket</DialogTitle>
+            <DialogTitle>
+              {editingItem ? "Edit Tahapan Alur Tiket" : "Tambah Tahapan Alur Tiket"}
+            </DialogTitle>
             <DialogDescription>
-              Masukkan nama tahapan proses penanganan tiket.
+              {editingItem
+                ? "Perbarui nama, urutan proses, atau sifat penutupan tahapan tiket."
+                : "Masukkan nama tahapan proses penanganan tiket."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -722,6 +1020,15 @@ export default function MasterDataPage() {
                 placeholder="Contoh: Menunggu Sparepart, Investigasi Vendor"
                 value={nameInput}
                 onChange={(e) => setNameInput(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Urutan Tahapan</label>
+              <Input
+                type="number"
+                placeholder="10"
+                value={sequenceInput}
+                onChange={(e) => setSequenceInput(parseInt(e.target.value, 10) || 10)}
               />
             </div>
             <div className="flex items-center gap-4 pt-2">
@@ -746,21 +1053,102 @@ export default function MasterDataPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setModalType(null)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setModalType(null)
+                setEditingItem(null)
+              }}
+            >
               Batal
             </Button>
             <Button
-              disabled={!nameInput.trim() || createStageMutation.isPending}
+              disabled={!nameInput.trim() || saveStageMutation.isPending}
               onClick={() =>
-                createStageMutation.mutate({
+                saveStageMutation.mutate({
+                  id: editingItem?.id,
                   name: nameInput.trim(),
-                  sequence: (stages.length + 1) * 10,
+                  sequence: sequenceInput,
                   is_starting: isStarting,
                   is_closing: isClosing,
                 })
               }
             >
-              Simpan Tahapan
+              {saveStageMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Menyimpan...
+                </>
+              ) : (
+                "Simpan Tahapan"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Konfirmasi Hapus Master Data */}
+      <Dialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-5 w-5" />
+              Hapus{" "}
+              {deleteTarget?.type === "category"
+                ? "Kategori"
+                : deleteTarget?.type === "team"
+                ? "Tim"
+                : "Tahapan"}
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-foreground/80">
+              Apakah Anda yakin ingin menghapus{" "}
+              <strong className="text-foreground">{deleteTarget?.name}</strong>?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
+            Data tiket yang terkait dengan item ini akan tetap aman dan ikatannya akan dilepaskan/dialihkan secara otomatis oleh sistem.
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>
+              Batal
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={
+                deleteCategoryMutation.isPending ||
+                deleteTeamMutation.isPending ||
+                deleteStageMutation.isPending
+              }
+              onClick={() => {
+                if (!deleteTarget) return
+                if (deleteTarget.type === "category") {
+                  deleteCategoryMutation.mutate(deleteTarget.id)
+                } else if (deleteTarget.type === "team") {
+                  deleteTeamMutation.mutate(deleteTarget.id)
+                } else if (deleteTarget.type === "stage") {
+                  deleteStageMutation.mutate(deleteTarget.id)
+                }
+              }}
+              className="gap-2"
+            >
+              {deleteCategoryMutation.isPending ||
+              deleteTeamMutation.isPending ||
+              deleteStageMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Menghapus...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4" />
+                  Ya, Hapus
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

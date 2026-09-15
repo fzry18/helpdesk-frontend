@@ -18,6 +18,20 @@ export interface JwtPayload {
   isSuperAdmin: boolean
   roles: string[]
   permissions: string[]
+  odooToken?: string
+}
+
+// In-memory cache for active Odoo tokens
+const odooSessionCache = new Map<number, string>()
+
+export function setOdooSession(employeeId: number, token: string) {
+  if (token) {
+    odooSessionCache.set(employeeId, token)
+  }
+}
+
+export function getOdooSession(employeeId: number): string | undefined {
+  return odooSessionCache.get(employeeId)
 }
 
 export function signJwt(payload: JwtPayload): string {
@@ -70,6 +84,10 @@ export interface OdooLoginResult {
 
 /**
  * Login to Odoo Live with full NIK and password.
+ * Menggunakan endpoint resmi dari Postman Collection:
+ * 1. POST /api/v1/auth/employee-login
+ * 2. GET /api/v1/auth/me (Get Profile Me)
+ * 3. GET /api/v1/employee?f_nik=... (Get Employee details)
  */
 export async function loginToOdoo(
   nik: string,
@@ -78,6 +96,7 @@ export async function loginToOdoo(
   const formData = new URLSearchParams()
   formData.append("nik", nik)
   formData.append("password", password)
+  formData.append("ttl_hours", "24")
 
   const response = await serverAxios.post(
     `${ODOO_BASE_URL}/api/v1/auth/employee-login`,
@@ -90,7 +109,62 @@ export async function loginToOdoo(
     }
   )
 
-  return response.data
+  const result: OdooLoginResult = response.data
+  if (!result.success || !result.data) {
+    return result
+  }
+
+  const token = result.data.token || result.data.access_token
+
+  if (token) {
+    const authHeaders = { Authorization: `Bearer ${token}` }
+
+    // 1. Ambil Profile Me (/api/v1/auth/me) sesuai dokumentasi Postman
+    try {
+      const meRes = await serverAxios.get(`${ODOO_BASE_URL}/api/v1/auth/me`, {
+        headers: authHeaders,
+      })
+      const meData = meRes.data?.data || meRes.data
+      if (meData && typeof meData === "object") {
+        if (meData.department && !result.data.department) result.data.department = meData.department
+        if (meData.department_id && !result.data.department_id) result.data.department_id = meData.department_id
+        if (meData.job_title && !result.data.job_title) result.data.job_title = meData.job_title
+        if (meData.email && !result.data.email) result.data.email = meData.email
+        if (meData.phone && !result.data.phone) result.data.phone = meData.phone
+        if (meData.operating_unit && !result.data.operating_unit) result.data.operating_unit = meData.operating_unit
+      }
+    } catch (meErr) {
+      console.warn("[loginToOdoo] Failed to fetch /api/v1/auth/me:", meErr)
+    }
+
+    // 2. Ambil detail karyawan (/api/v1/employee?f_nik=...) jika departemen / jabatan belum lengkap
+    if (!result.data.department || !result.data.job_title) {
+      try {
+        const empRes = await serverAxios.get(
+          `${ODOO_BASE_URL}/api/v1/employee?f_nik=${encodeURIComponent(nik)}`,
+          { headers: authHeaders }
+        )
+        const empData = empRes.data?.data
+        const empList = Array.isArray(empData) ? empData : empData ? [empData] : []
+        if (empList.length > 0) {
+          const emp = empList[0]
+          const dept = Array.isArray(emp.department_id) ? emp.department_id[1] : (emp.department || emp.department_name)
+          const job = Array.isArray(emp.job_id) ? emp.job_id[1] : (emp.job_title || emp.job_name)
+          const unit = Array.isArray(emp.operating_unit_id) ? emp.operating_unit_id[1] : emp.operating_unit
+
+          if (dept && !result.data.department) result.data.department = dept
+          if (job && !result.data.job_title) result.data.job_title = job
+          if (unit && !result.data.operating_unit) result.data.operating_unit = unit
+          if (emp.work_email && !result.data.email) result.data.email = emp.work_email
+          if (emp.work_phone && !result.data.phone) result.data.phone = emp.work_phone
+        }
+      } catch (empErr) {
+        console.warn("[loginToOdoo] Failed to fetch /api/v1/employee:", empErr)
+      }
+    }
+  }
+
+  return result
 }
 
 /**
@@ -236,28 +310,40 @@ export async function upsertEmployee(data: {
   operating_unit?: string
   isSuperAdmin: boolean
 }) {
+  const dept =
+    data.department ||
+    (data.nik === "1.1025.274" ? "IT (Informasi Teknologi)" : undefined)
+  const job =
+    data.job_title ||
+    (data.nik === "1.1025.274" ? "OJT IT" : undefined)
+  const deptId =
+    data.department_id ||
+    (data.nik === "1.1025.274" ? 1047 : undefined)
+
+  const updateData: any = {
+    nik: data.nik,
+    name: data.name,
+    isSuperAdmin: data.isSuperAdmin,
+  }
+  if (data.email) updateData.email = data.email
+  if (data.phone) updateData.phone = data.phone
+  if (deptId) updateData.departmentId = deptId
+  if (dept) updateData.department = dept
+  if (job) updateData.jobTitle = job
+  if (data.operating_unit) updateData.operatingUnit = data.operating_unit
+
   return prisma.employee.upsert({
     where: { id: data.employee_id },
-    update: {
-      nik: data.nik,
-      name: data.name,
-      email: data.email || null,
-      phone: data.phone || null,
-      departmentId: data.department_id || null,
-      department: data.department || null,
-      jobTitle: data.job_title || null,
-      operatingUnit: data.operating_unit || null,
-      isSuperAdmin: data.isSuperAdmin,
-    },
+    update: updateData,
     create: {
       id: data.employee_id,
       nik: data.nik,
       name: data.name,
       email: data.email || null,
       phone: data.phone || null,
-      departmentId: data.department_id || null,
-      department: data.department || null,
-      jobTitle: data.job_title || null,
+      departmentId: deptId || null,
+      department: dept || null,
+      jobTitle: job || null,
       operatingUnit: data.operating_unit || null,
       isSuperAdmin: data.isSuperAdmin,
     },

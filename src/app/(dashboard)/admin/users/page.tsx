@@ -33,6 +33,7 @@ import {
   Building2,
   Briefcase,
   Check,
+  Trash2,
 } from "lucide-react"
 
 interface EmployeeUser {
@@ -85,7 +86,7 @@ const ROLE_CONFIG: Record<
 
 export default function UsersManagementPage() {
   const queryClient = useQueryClient()
-  const { hasRole } = useAuthStore()
+  const { hasRole, employee: currentEmployee } = useAuthStore()
   const isSuperAdmin = hasRole("SUPER_ADMIN")
 
   const [search, setSearch] = useState("")
@@ -96,6 +97,7 @@ export default function UsersManagementPage() {
   const [odooQuery, setOdooQuery] = useState("")
   const [selectedOdooEmp, setSelectedOdooEmp] = useState<OdooEmployee | null>(null)
   const [assignRole, setAssignRole] = useState("IT_SUPPORT")
+  const [deleteTargetUser, setDeleteTargetUser] = useState<EmployeeUser | null>(null)
 
   // Fetch local employees
   const { data: usersData, isLoading } = useQuery({
@@ -112,7 +114,11 @@ export default function UsersManagementPage() {
   })
 
   // Search Odoo employees query
-  const { data: odooResults, isFetching: isSearchingOdoo } = useQuery({
+  const {
+    data: odooResults,
+    isFetching: isSearchingOdoo,
+    error: odooSearchError,
+  } = useQuery({
     queryKey: ["odoo-search", odooQuery],
     queryFn: async () => {
       if (odooQuery.length < 2) return []
@@ -122,6 +128,7 @@ export default function UsersManagementPage() {
       return res.data || []
     },
     enabled: odooQuery.length >= 2,
+    retry: false,
   })
 
   // Change Role Mutation
@@ -156,6 +163,8 @@ export default function UsersManagementPage() {
       nik: string
       name: string
       operating_unit: string
+      department?: string
+      job_title?: string
       role_slug: string
     }) => apiClient.post<any>("/users/search-odoo", payload),
     onSuccess: (data: any) => {
@@ -171,6 +180,26 @@ export default function UsersManagementPage() {
     onError: (err: any) => {
       toast({
         title: "Gagal Menambahkan Karyawan",
+        description: err.response?.data?.message || err.message,
+        variant: "destructive",
+      })
+    },
+  })
+
+  // Delete User Mutation
+  const deleteUserMutation = useMutation({
+    mutationFn: (userId: number) => apiClient.delete<any>(`/users?id=${userId}`),
+    onSuccess: (data: any) => {
+      toast({
+        title: "Pengguna Dihapus",
+        description: data?.message || "Pengguna berhasil dihapus.",
+      })
+      setDeleteTargetUser(null)
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] })
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Gagal Menghapus Pengguna",
         description: err.response?.data?.message || err.message,
         variant: "destructive",
       })
@@ -306,28 +335,62 @@ export default function UsersManagementPage() {
                         </td>
                         <td className="px-6 py-4 text-right">
                           {isSuperAdmin ? (
-                            <Select
-                              value={primaryRole}
-                              onValueChange={(val) =>
-                                updateRoleMutation.mutate({
-                                  employee_id: u.id,
-                                  role_slug: val,
-                                })
-                              }
-                              disabled={updateRoleMutation.isPending}
-                            >
-                              <SelectTrigger className="w-44 ml-auto h-8 text-xs">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent align="end">
-                                <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
-                                <SelectItem value="ADMIN_IT_SUPPORT">
-                                  Admin IT Support
-                                </SelectItem>
-                                <SelectItem value="IT_SUPPORT">IT Support</SelectItem>
-                                <SelectItem value="USER">User (Requestor)</SelectItem>
-                              </SelectContent>
-                            </Select>
+                            <div className="flex items-center justify-end gap-2">
+                              <Select
+                                value={primaryRole}
+                                onValueChange={(val) =>
+                                  updateRoleMutation.mutate({
+                                    employee_id: u.id,
+                                    role_slug: val,
+                                  })
+                                }
+                                disabled={updateRoleMutation.isPending}
+                              >
+                                <SelectTrigger className="w-40 h-8 text-xs">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent align="end">
+                                  <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
+                                  <SelectItem value="ADMIN_IT_SUPPORT">
+                                    Admin IT Support
+                                  </SelectItem>
+                                  <SelectItem value="IT_SUPPORT">IT Support</SelectItem>
+                                  <SelectItem value="USER">User (Requestor)</SelectItem>
+                                </SelectContent>
+                              </Select>
+
+                              {!(
+                                u.nik === "1.1025.274" ||
+                                u.is_super_admin ||
+                                currentEmployee?.id === u.id ||
+                                currentEmployee?.nik === u.nik
+                              ) ? (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                  title="Hapus Pengguna dari Helpdesk"
+                                  onClick={() => setDeleteTargetUser(u)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              ) : (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-muted-foreground/30 cursor-not-allowed"
+                                  title={
+                                    currentEmployee?.id === u.id ||
+                                    currentEmployee?.nik === u.nik
+                                      ? "Akun Anda sendiri tidak dapat dihapus"
+                                      : "Akun Super Admin tidak dapat dihapus"
+                                  }
+                                  disabled
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
                           ) : (
                             <span className="text-xs text-muted-foreground">
                               Hanya Super Admin
@@ -371,12 +434,25 @@ export default function UsersManagementPage() {
               </div>
             </div>
 
-            {/* Odoo Search Results */}
-            {isSearchingOdoo && (
-              <div className="flex items-center justify-center p-4 text-sm text-muted-foreground gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Mencari data di Odoo Live...</span>
+            {/* Odoo Search Error Alert */}
+            {odooSearchError && (
+              <div className="p-3 rounded-lg border border-destructive/30 bg-destructive/10 text-xs text-destructive flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <p className="font-semibold">Pencarian Odoo Terkendala</p>
+                  <p>
+                    {(odooSearchError as any)?.response?.data?.message ||
+                      (odooSearchError as any)?.message ||
+                      "Gagal mengambil data dari server Odoo Live."}
+                  </p>
+                </div>
               </div>
+            )}
+
+            {!isSearchingOdoo && !odooSearchError && odooQuery.length >= 2 && (!odooResults || odooResults.length === 0) && (
+              <p className="text-center text-xs text-muted-foreground py-4">
+                Tidak ditemukan karyawan di Odoo dengan kata kunci &quot;{odooQuery}&quot;.
+              </p>
             )}
 
             {odooResults && odooResults.length > 0 && !selectedOdooEmp && (
@@ -465,6 +541,8 @@ export default function UsersManagementPage() {
                   nik: selectedOdooEmp.nik,
                   name: selectedOdooEmp.name,
                   operating_unit: selectedOdooEmp.operating_unit,
+                  department: selectedOdooEmp.department,
+                  job_title: selectedOdooEmp.job_title,
                   role_slug: assignRole,
                 })
               }}
@@ -476,6 +554,62 @@ export default function UsersManagementPage() {
                 </>
               ) : (
                 "Simpan Karyawan"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Konfirmasi Hapus Pengguna */}
+      <Dialog
+        open={!!deleteTargetUser}
+        onOpenChange={(open) => !open && setDeleteTargetUser(null)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-5 w-5" />
+              Hapus Pengguna
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-foreground/80">
+              Apakah Anda yakin ingin menghapus pengguna{" "}
+              <strong className="text-foreground">{deleteTargetUser?.name}</strong>{" "}
+              (NIK: {deleteTargetUser?.nik}) dari Helpdesk?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
+            Peran dan hak akses pengguna ini akan dihapus dari sistem. Karyawan tetap dapat login kembali dari Odoo sebagai User biasa jika diperlukan di masa depan.
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteTargetUser(null)}
+              disabled={deleteUserMutation.isPending}
+            >
+              Batal
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (deleteTargetUser) {
+                  deleteUserMutation.mutate(deleteTargetUser.id)
+                }
+              }}
+              disabled={deleteUserMutation.isPending}
+              className="gap-2"
+            >
+              {deleteUserMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Menghapus...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4" />
+                  Ya, Hapus Pengguna
+                </>
               )}
             </Button>
           </DialogFooter>

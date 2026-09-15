@@ -27,32 +27,19 @@ import {
 } from "@/components/ui/select"
 import { toast } from "@/hooks/use-toast"
 import { useAuthStore } from "@/store/authStore"
-import { Plus, Loader2, AlertCircle, Upload, X } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { Plus, Loader2, AlertCircle, Upload, X, FileIcon, Sparkles } from "lucide-react"
 
-// Validation schema based on API documentation
 const createTicketSchema = z.object({
-    ticket_category_type: z.enum(["helper", "system"]).default("helper"),
-    system_category: z.enum(["odoo", "p2h", "job_portal", "other"]).optional(),
     subject: z.string().min(5, "Subject minimal 5 karakter").max(200, "Subject maksimal 200 karakter"),
     description: z.string().min(10, "Deskripsi minimal 10 karakter"),
+    priority: z.string().default("1"),
+    category_id: z.string().optional(),
+    team_id: z.string().optional(),
+    ticket_type_id: z.string().optional(),
     customer_name: z.string().optional(),
     email: z.string().email("Email tidak valid").optional().or(z.literal("")),
     phone: z.string().optional(),
     department_id: z.string().optional(),
-    priority: z.string().optional(),
-    category_id: z.string().optional(),
-    team_id: z.string().optional(),
-    ticket_type_id: z.string().optional(),
-    // Odoo context (untuk ticket system + system_category=odoo)
-    captured_url: z.string().optional(),
-    captured_module: z.string().optional(),
-    captured_model: z.string().optional(),
-    captured_view_type: z.string().optional(),
-    captured_record_id: z.string().optional(),
-    captured_record_ref: z.string().optional(),
-    captured_menu_path: z.string().optional(),
-    captured_browser: z.string().optional(),
 })
 
 type CreateTicketForm = z.infer<typeof createTicketSchema>
@@ -60,14 +47,75 @@ type CreateTicketForm = z.infer<typeof createTicketSchema>
 interface CreateTicketDialogProps {
     trigger?: React.ReactNode
     onSuccess?: () => void
+    initialSubject?: string
+    initialDescription?: string
+    open?: boolean
+    onOpenChange?: (open: boolean) => void
 }
 
-export function CreateTicketDialog({ trigger, onSuccess }: CreateTicketDialogProps) {
-    const [open, setOpen] = useState(false)
+const PRESETS = [
+    {
+        id: "hardware",
+        label: "Printer / PC",
+        icon: "🖨️",
+        keyword: "Hardware",
+        defaultSubject: "Kendala Printer / Komputer Fisik",
+        placeholder: "Sebutkan nama perangkat, nomor aset, atau kendala fisik printer/komputer...",
+    },
+    {
+        id: "network",
+        label: "Jaringan & WiFi",
+        icon: "🌐",
+        keyword: "Jaringan",
+        defaultSubject: "Gangguan Koneksi Jaringan / WiFi",
+        placeholder: "Jelaskan lokasi ruangan, nama SSID WiFi, dan detail kendala koneksi...",
+    },
+    {
+        id: "system",
+        label: "Sistem / Odoo ERP",
+        icon: "💻",
+        keyword: "Software",
+        defaultSubject: "Error Aplikasi / Odoo ERP",
+        placeholder: "Sebutkan menu/modul yang bermasalah, nomor dokumen, dan pesan error...",
+    },
+    {
+        id: "account",
+        label: "Akun & Password",
+        icon: "🔑",
+        keyword: "Akun",
+        defaultSubject: "Permintaan Reset Password / Hak Akses",
+        placeholder: "Sebutkan akun, NIK, sistem yang dituju, dan jenis akses yang dibutuhkan...",
+    },
+]
+
+export function CreateTicketDialog({
+    trigger,
+    onSuccess,
+    initialSubject,
+    initialDescription,
+    open: controlledOpen,
+    onOpenChange: setControlledOpen,
+}: CreateTicketDialogProps) {
+    const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
+    const isControlled = controlledOpen !== undefined
+    const open = isControlled ? controlledOpen : uncontrolledOpen
+    const setOpen = (val: boolean) => {
+        if (isControlled) {
+            setControlledOpen?.(val)
+        } else {
+            setUncontrolledOpen(val)
+        }
+    }
+
     const [attachments, setAttachments] = useState<File[]>([])
+    const [selectedPreset, setSelectedPreset] = useState<string | null>(null)
     const queryClient = useQueryClient()
-    const isAdmin = useAuthStore((s) => s.isManager())
-    const employee = useAuthStore((s) => s.employee)
+    const { isManager, hasRole, employee } = useAuthStore()
+    const isStaff =
+        isManager() ||
+        hasRole("SUPER_ADMIN") ||
+        hasRole("ADMIN_IT_SUPPORT") ||
+        hasRole("IT_SUPPORT")
 
     const {
         register,
@@ -79,19 +127,17 @@ export function CreateTicketDialog({ trigger, onSuccess }: CreateTicketDialogPro
     } = useForm<CreateTicketForm>({
         resolver: zodResolver(createTicketSchema),
         defaultValues: {
-            ticket_category_type: "helper",
+            subject: initialSubject || "",
+            description: initialDescription || "",
+            priority: "1",
             department_id: employee?.department_id ? employee.department_id.toString() : "all",
         },
     })
 
-    const ticketCategoryType = watch("ticket_category_type")
-    const systemCategory = watch("system_category")
-
     useEffect(() => {
-        if (open && isAdmin && employee) {
-            setValue("department_id", employee.department_id ? employee.department_id.toString() : "all")
-        }
-    }, [open, isAdmin, employee, setValue])
+        if (initialSubject) setValue("subject", initialSubject)
+        if (initialDescription) setValue("description", initialDescription)
+    }, [initialSubject, initialDescription, setValue])
 
     // Fetch master data
     const { data: masterData } = useQuery({
@@ -99,37 +145,38 @@ export function CreateTicketDialog({ trigger, onSuccess }: CreateTicketDialogPro
         queryFn: () => masterDataAPI.getAll(),
     })
 
+    const handleSelectPreset = (preset: typeof PRESETS[number]) => {
+        setSelectedPreset(preset.id)
+        if (!watch("subject") || watch("subject") === "") {
+            setValue("subject", preset.defaultSubject)
+        }
+        // Match category
+        const categories = masterData?.data?.categories || []
+        const matched = categories.find((c: any) =>
+            c.name.toLowerCase().includes(preset.keyword.toLowerCase())
+        )
+        if (matched) {
+            setValue("category_id", String(matched.id))
+        }
+    }
+
     // Create ticket mutation
     const createMutation = useMutation({
         mutationFn: async (data: CreateTicketForm) => {
             const payload: any = {
                 subject: data.subject,
                 description: data.description,
-                ticket_category_type: data.ticket_category_type || "helper",
-            }
-            if (data.ticket_category_type === "system" && data.system_category)
-                payload.system_category = data.system_category
-            if (isAdmin && data.department_id && data.department_id !== "all")
-                payload.department_id = parseInt(data.department_id)
-            if (isAdmin) {
-                if (data.customer_name?.trim()) payload.customer_name = data.customer_name.trim()
-                if (data.email?.trim()) payload.email = data.email.trim()
-                if (data.phone?.trim()) payload.phone = data.phone.trim()
+                priority: data.priority || "1",
             }
             if (data.category_id) payload.category_id = parseInt(data.category_id)
-            if (data.team_id) payload.team_id = parseInt(data.team_id)
-            if (data.ticket_type_id) payload.ticket_type_id = parseInt(data.ticket_type_id)
-            // Odoo context (untuk ticket system + Odoo)
-            if (data.captured_url) payload.captured_url = data.captured_url
-            if (data.captured_module) payload.captured_module = data.captured_module
-            if (data.captured_model) payload.captured_model = data.captured_model
-            if (data.captured_view_type) payload.captured_view_type = data.captured_view_type
-            if (data.captured_record_id) payload.captured_record_id = parseInt(data.captured_record_id)
-            if (data.captured_record_ref) payload.captured_record_ref = data.captured_record_ref
-            if (data.captured_menu_path) payload.captured_menu_path = data.captured_menu_path
-            if (data.captured_browser) payload.captured_browser = data.captured_browser
+            if (isStaff && data.team_id) payload.team_id = parseInt(data.team_id)
+            if (isStaff && data.ticket_type_id) payload.ticket_type_id = parseInt(data.ticket_type_id)
 
-            // Handle file attachments (convert to base64)
+            if (isStaff && data.customer_name?.trim()) payload.customer_name = data.customer_name.trim()
+            if (isStaff && data.email?.trim()) payload.email = data.email.trim()
+            if (isStaff && data.phone?.trim()) payload.phone = data.phone.trim()
+
+            // Handle file attachments
             if (attachments.length > 0) {
                 payload.attachments = await Promise.all(
                     attachments.map(async (file) => {
@@ -147,12 +194,13 @@ export function CreateTicketDialog({ trigger, onSuccess }: CreateTicketDialogPro
         onSuccess: (response) => {
             toast({
                 title: "✅ Tiket Berhasil Dibuat!",
-                description: `Tiket #${response.data.ticket_number} telah dibuat.`,
+                description: `Tiket #${response.data.ticket_number || response.data.id} telah tercatat.`,
             })
             queryClient.invalidateQueries({ queryKey: ["tickets"] })
             queryClient.invalidateQueries({ queryKey: ["dashboard"] })
             reset()
             setAttachments([])
+            setSelectedPreset(null)
             setOpen(false)
             onSuccess?.()
         },
@@ -191,193 +239,72 @@ export function CreateTicketDialog({ trigger, onSuccess }: CreateTicketDialogPro
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                {trigger || (
-                    <Button>
-                        <Plus className="mr-2 h-4 w-4" />
-                        Buat Tiket Baru
-                    </Button>
-                )}
-            </DialogTrigger>
+            {trigger !== null && (
+                <DialogTrigger asChild>
+                    {trigger || (
+                        <Button>
+                            <Plus className="mr-2 h-4 w-4" />
+                            Buat Tiket Baru
+                        </Button>
+                    )}
+                </DialogTrigger>
+            )}
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2 text-2xl">
-                        <Plus className="h-6 w-6" />
-                        Buat Tiket Baru
+                    <DialogTitle className="flex items-center gap-2 text-xl font-bold">
+                        <Plus className="h-5 w-5 text-primary" />
+                        Buat Tiket Bantuan Helpdesk
                     </DialogTitle>
                     <DialogDescription>
-                        Isi form dibawah untuk membuat tiket helpdesk baru. Field yang wajib diisi ditandai dengan *
+                        Pilih jenis kendala atau ceritakan masalah yang Anda alami secara rinci.
                     </DialogDescription>
                 </DialogHeader>
 
-                <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-                    {/* Tipe Tiket: Helper vs System */}
-                    <div className="grid gap-4 md:grid-cols-2">
-                        <div className="space-y-2">
-                            <Label>Tipe Tiket</Label>
-                            <Select
-                                value={ticketCategoryType}
-                                onValueChange={(v) => {
-                                    setValue("ticket_category_type", v as "helper" | "system")
-                                    if (v === "helper") setValue("system_category", undefined)
-                                }}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="helper">Ticketing Helper (bantuan lapangan/manpower)</SelectItem>
-                                    <SelectItem value="system">Ticketing System (masalah sistem Odoo/P2H/dll)</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <p className="text-xs text-muted-foreground">
-                                Helper: printer, logistik, dll. System: Odoo, P2H, Job Portal.
-                            </p>
-                        </div>
-                        {ticketCategoryType === "system" && (
-                            <div className="space-y-2">
-                                <Label>Sistem</Label>
-                                <Select
-                                    value={systemCategory || ""}
-                                    onValueChange={(v) => setValue("system_category", v as any)}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Pilih sistem" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="odoo">Odoo</SelectItem>
-                                        <SelectItem value="p2h">Web P2H</SelectItem>
-                                        <SelectItem value="job_portal">Job Portal</SelectItem>
-                                        <SelectItem value="other">Lainnya</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Subject */}
+                <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+                    {/* Quick Issue Presets */}
                     <div className="space-y-2">
-                        <Label htmlFor="subject">
-                            Subject <span className="text-destructive">*</span>
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                            <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                            Pintasan Jenis Masalah Cepat
                         </Label>
-                        <Input
-                            id="subject"
-                            placeholder="Mis: Website tidak bisa diakses"
-                            {...register("subject")}
-                            className={errors.subject ? "border-destructive" : ""}
-                        />
-                        {errors.subject && (
-                            <p className="text-sm text-destructive flex items-center gap-1">
-                                <AlertCircle className="h-3 w-3" />
-                                {errors.subject.message}
-                            </p>
-                        )}
-                    </div>
-
-                    {/* Description */}
-                    <div className="space-y-2">
-                        <Label htmlFor="description">
-                            Deskripsi <span className="text-destructive">*</span>
-                        </Label>
-                        <Textarea
-                            id="description"
-                            placeholder="Jelaskan detail masalah yang Anda alami..."
-                            rows={5}
-                            {...register("description")}
-                            className={errors.description ? "border-destructive" : ""}
-                        />
-                        {errors.description && (
-                            <p className="text-sm text-destructive flex items-center gap-1">
-                                <AlertCircle className="h-3 w-3" />
-                                {errors.description.message}
-                            </p>
-                        )}
-                    </div>
-
-                    {/* User biasa: data dari employee (tidak perlu isi). Admin: bisa isi data peminta. */}
-                    {!isAdmin && employee && (
-                        <div className="rounded-lg border bg-muted/30 p-4 space-y-1">
-                            <p className="text-sm font-medium text-muted-foreground">Tiket akan dibuat atas nama Anda (data dari profil):</p>
-                            <p className="text-sm">{employee.name}</p>
-                            {employee.department && <p className="text-xs text-muted-foreground">Departement: {employee.department}</p>}
-                            {employee.email && <p className="text-xs text-muted-foreground">{employee.email}</p>}
-                            {employee.phone && <p className="text-xs text-muted-foreground">{employee.phone}</p>}
-                        </div>
-                    )}
-
-                    {isAdmin && (
-                        <div className="space-y-4 rounded-lg border p-4 bg-muted/20">
-                            <p className="text-sm font-medium">Data peminta (untuk tiket atas nama orang lain)</p>
-                            <p className="text-xs text-muted-foreground">Kosongkan jika tiket untuk diri Anda. Isi jika membuat tiket untuk orang lain.</p>
-                            <div className="grid gap-4 md:grid-cols-2">
-                                <div className="space-y-2">
-                                    <Label htmlFor="customer_name">Nama peminta</Label>
-                                    <Input
-                                        id="customer_name"
-                                        placeholder={employee?.name || "Nama peminta"}
-                                        {...register("customer_name")}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Departement</Label>
-                                    <Select
-                                        value={watch("department_id") || "all"}
-                                        onValueChange={(v) => setValue("department_id", v)}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            {PRESETS.map((p) => {
+                                const isSelected = selectedPreset === p.id
+                                return (
+                                    <button
+                                        type="button"
+                                        key={p.id}
+                                        onClick={() => handleSelectPreset(p)}
+                                        className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all ${
+                                            isSelected
+                                                ? "border-primary bg-primary/10 text-primary shadow-sm ring-1 ring-primary"
+                                                : "border-border/60 hover:border-primary/40 hover:bg-muted/30"
+                                        }`}
                                     >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Pilih departement" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">Sama dengan departement saya</SelectItem>
-                                            {masterData?.data?.departments?.map((dept) => (
-                                                <SelectItem key={dept.id} value={dept.id.toString()}>
-                                                    {dept.name}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="email">Email peminta</Label>
-                                    <Input
-                                        id="email"
-                                        type="email"
-                                        placeholder={employee?.email || "email@example.com"}
-                                        {...register("email")}
-                                        className={errors.email ? "border-destructive" : ""}
-                                    />
-                                    {errors.email && (
-                                        <p className="text-xs text-destructive flex items-center gap-1">
-                                            <AlertCircle className="h-3 w-3" />
-                                            {errors.email.message}
-                                        </p>
-                                    )}
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="phone">Telepon peminta</Label>
-                                    <Input
-                                        id="phone"
-                                        placeholder={employee?.phone || "+628123456789"}
-                                        {...register("phone")}
-                                    />
-                                </div>
-                            </div>
+                                        <span className="text-xl mb-1">{p.icon}</span>
+                                        <span className="text-xs font-medium leading-tight">{p.label}</span>
+                                    </button>
+                                )
+                            })}
                         </div>
-                    )}
+                    </div>
 
-                    <div className="grid gap-4 md:grid-cols-3">
-                        {/* Category */}
-                        <div className="space-y-2">
-                            <Label htmlFor="category">Kategori</Label>
+                    {/* Category & Priority (Staff only for priority) */}
+                    <div className={isStaff ? "grid grid-cols-1 gap-4 sm:grid-cols-2" : "space-y-1.5"}>
+                        <div className="space-y-1.5">
+                            <Label className="text-xs font-medium">
+                                Kategori Masalah <span className="text-destructive">*</span>
+                            </Label>
                             <Select
-                                onValueChange={(value) => setValue("category_id", value)}
+                                value={watch("category_id")}
+                                onValueChange={(val) => setValue("category_id", val)}
                             >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Pilih kategori" />
+                                <SelectTrigger className="h-9">
+                                    <SelectValue placeholder="Pilih kategori kendala" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {masterData?.data?.categories?.map((cat) => (
-                                        <SelectItem key={cat.id} value={cat.id.toString()}>
+                                    {masterData?.data?.categories?.map((cat: any) => (
+                                        <SelectItem key={cat.id} value={String(cat.id)}>
                                             {cat.name}
                                         </SelectItem>
                                     ))}
@@ -385,85 +312,82 @@ export function CreateTicketDialog({ trigger, onSuccess }: CreateTicketDialogPro
                             </Select>
                         </div>
 
-                        {/* Team */}
-                        <div className="space-y-2">
-                            <Label htmlFor="team">Team</Label>
-                            <Select onValueChange={(value) => setValue("team_id", value)}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Pilih team" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {masterData?.data?.teams?.map((team) => (
-                                        <SelectItem key={team.id} value={team.id.toString()}>
-                                            {team.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        {/* Ticket Type */}
-                        <div className="space-y-2">
-                            <Label htmlFor="type">Tipe Tiket</Label>
-                            <Select
-                                onValueChange={(value) => setValue("ticket_type_id", value)}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Pilih tipe" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="1">Question</SelectItem>
-                                    <SelectItem value="2">Bug Report</SelectItem>
-                                    <SelectItem value="3">Feature Request</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
+                        {isStaff && (
+                            <div className="space-y-1.5">
+                                <Label className="text-xs font-medium">Tingkat Prioritas</Label>
+                                <Select
+                                    value={watch("priority") || "2"}
+                                    onValueChange={(val) => setValue("priority", val)}
+                                >
+                                    <SelectTrigger className="h-9">
+                                        <SelectValue placeholder="Prioritas" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="1">🟢 Rendah (Low)</SelectItem>
+                                        <SelectItem value="2">🟡 Sedang (Normal)</SelectItem>
+                                        <SelectItem value="3">🟠 Tinggi (High - Menghambat)</SelectItem>
+                                        <SelectItem value="4">🔴 Mendesak (Critical - Urgent)</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
                     </div>
 
-                    {/* Odoo context (hanya untuk ticket system + Odoo) */}
-                    {ticketCategoryType === "system" && systemCategory === "odoo" && (
-                        <div className="space-y-4 rounded-lg border p-4 bg-muted/30">
-                            <Label className="text-sm font-medium">Info konteks Odoo (opsional)</Label>
-                            <div className="grid gap-2 md:grid-cols-2">
-                                <div className="space-y-1">
-                                    <Label className="text-xs">URL</Label>
-                                    <Input placeholder="URL halaman" {...register("captured_url")} />
-                                </div>
-                                <div className="space-y-1">
-                                    <Label className="text-xs">Module</Label>
-                                    <Input placeholder="Modul" {...register("captured_module")} />
-                                </div>
-                                <div className="space-y-1">
-                                    <Label className="text-xs">Model</Label>
-                                    <Input placeholder="Model teknis" {...register("captured_model")} />
-                                </div>
-                                <div className="space-y-1">
-                                    <Label className="text-xs">Tipe View</Label>
-                                    <Input placeholder="list, form, kanban" {...register("captured_view_type")} />
-                                </div>
-                                <div className="space-y-1 md:col-span-2">
-                                    <Label className="text-xs">Menu path</Label>
-                                    <Input placeholder="Path menu" {...register("captured_menu_path")} />
-                                </div>
-                            </div>
-                        </div>
-                    )}
+                    {/* Subject */}
+                    <div className="space-y-1.5">
+                        <Label htmlFor="subject" className="text-xs font-medium">
+                            Judul Singkat / Subjek <span className="text-destructive">*</span>
+                        </Label>
+                        <Input
+                            id="subject"
+                            placeholder="Contoh: Printer EPSON L3110 tidak mau menarik kertas"
+                            {...register("subject")}
+                            className={`h-9 ${errors.subject ? "border-destructive" : ""}`}
+                        />
+                        {errors.subject && (
+                            <p className="text-xs text-destructive flex items-center gap-1">
+                                <AlertCircle className="h-3 w-3" />
+                                {errors.subject.message}
+                            </p>
+                        )}
+                    </div>
 
-                    {/* File Attachments */}
+                    {/* Description */}
+                    <div className="space-y-1.5">
+                        <Label htmlFor="description" className="text-xs font-medium">
+                            Ceritakan Kendala Secara Rinci <span className="text-destructive">*</span>
+                        </Label>
+                        <Textarea
+                            id="description"
+                            placeholder="Jelaskan kronologi kendala, pesan error di layar, atau apa yang sudah dicoba..."
+                            rows={4}
+                            {...register("description")}
+                            className={errors.description ? "border-destructive" : ""}
+                        />
+                        {errors.description && (
+                            <p className="text-xs text-destructive flex items-center gap-1">
+                                <AlertCircle className="h-3 w-3" />
+                                {errors.description.message}
+                            </p>
+                        )}
+                    </div>
+
+                    {/* Lampiran Berkas / Screenshot */}
                     <div className="space-y-2">
-                        <Label>Lampiran (Opsional)</Label>
+                        <Label className="text-xs font-medium">Lampiran Screenshot / Foto / Dokumen (Opsional)</Label>
                         <div className="flex items-center gap-2">
                             <Button
                                 type="button"
                                 variant="outline"
-                                onClick={() => document.getElementById("file-upload")?.click()}
-                                className="w-full"
+                                size="sm"
+                                onClick={() => document.getElementById("create-ticket-file-upload")?.click()}
+                                className="w-full h-9 border-dashed border-primary/40 hover:border-primary hover:bg-primary/5 text-xs gap-2"
                             >
-                                <Upload className="mr-2 h-4 w-4" />
-                                Pilih File
+                                <Upload className="h-3.5 w-3.5 text-primary" />
+                                Klik untuk Unggah Foto / File Bukti Kendala
                             </Button>
                             <input
-                                id="file-upload"
+                                id="create-ticket-file-upload"
                                 type="file"
                                 multiple
                                 className="hidden"
@@ -471,21 +395,29 @@ export function CreateTicketDialog({ trigger, onSuccess }: CreateTicketDialogPro
                                 accept="image/*,.pdf,.doc,.docx,.txt"
                             />
                         </div>
+
                         {attachments.length > 0 && (
-                            <div className="space-y-2">
-                                {attachments.map((file, index) => (
+                            <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                                {attachments.map((file, idx) => (
                                     <div
-                                        key={index}
-                                        className="flex items-center justify-between rounded-md border p-2"
+                                        key={idx}
+                                        className="flex items-center justify-between p-2 rounded-lg border bg-muted/40 text-xs"
                                     >
-                                        <span className="text-sm truncate">{file.name}</span>
+                                        <div className="flex items-center gap-2 truncate">
+                                            <FileIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                            <span className="truncate font-medium">{file.name}</span>
+                                            <span className="text-[10px] text-muted-foreground shrink-0">
+                                                ({(file.size / 1024).toFixed(1)} KB)
+                                            </span>
+                                        </div>
                                         <Button
                                             type="button"
                                             variant="ghost"
                                             size="sm"
-                                            onClick={() => removeFile(index)}
+                                            onClick={() => removeFile(idx)}
+                                            className="h-6 w-6 p-0 hover:text-destructive"
                                         >
-                                            <X className="h-4 w-4" />
+                                            <X className="h-3 w-3" />
                                         </Button>
                                     </div>
                                 ))}
@@ -493,30 +425,70 @@ export function CreateTicketDialog({ trigger, onSuccess }: CreateTicketDialogPro
                         )}
                     </div>
 
-                    {/* Action Buttons */}
-                    <div className="flex justify-end gap-3 pt-4 border-t">
+                    {/* Kontrol Khusus Admin / Dispatcher IT */}
+                    {isStaff && (
+                        <div className="p-3.5 rounded-xl border border-primary/20 bg-primary/[0.02] space-y-3">
+                            <p className="text-xs font-semibold text-primary">
+                                Panel Dispatcher / Kontrol Admin IT
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="space-y-1">
+                                    <Label className="text-xs text-muted-foreground">Tugaskan ke Tim IT Langsung</Label>
+                                    <Select
+                                        value={watch("team_id") || ""}
+                                        onValueChange={(val) => setValue("team_id", val)}
+                                    >
+                                        <SelectTrigger className="h-8 text-xs">
+                                            <SelectValue placeholder="Biarkan Kosong (Unassigned)" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="unassigned">-- Belum Ditugaskan --</SelectItem>
+                                            {masterData?.data?.teams?.map((t: any) => (
+                                                <SelectItem key={t.id} value={String(t.id)}>
+                                                    {t.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-1">
+                                    <Label className="text-xs text-muted-foreground">Nama Pemohon (Jika Atas Nama Orang Lain)</Label>
+                                    <Input
+                                        placeholder="Kosongkan jika tiket untuk diri Anda"
+                                        {...register("customer_name")}
+                                        className="h-8 text-xs"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Tombol Aksi */}
+                    <div className="flex justify-end gap-2 pt-3 border-t">
                         <Button
                             type="button"
                             variant="outline"
+                            size="sm"
                             onClick={() => {
                                 reset()
                                 setAttachments([])
+                                setSelectedPreset(null)
                                 setOpen(false)
                             }}
                             disabled={createMutation.isPending}
                         >
                             Batal
                         </Button>
-                        <Button type="submit" disabled={createMutation.isPending}>
+                        <Button type="submit" size="sm" disabled={createMutation.isPending}>
                             {createMutation.isPending ? (
                                 <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Membuat Tiket...
+                                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                                    Menyimpan Tiket...
                                 </>
                             ) : (
                                 <>
-                                    <Plus className="mr-2 h-4 w-4" />
-                                    Buat Tiket
+                                    <Plus className="mr-2 h-3.5 w-3.5" />
+                                    Kirim Tiket
                                 </>
                             )}
                         </Button>

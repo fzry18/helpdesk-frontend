@@ -35,6 +35,7 @@ export interface Ticket {
   ticket_number: string
   subject: string
   description: string
+  status?: string
   priority: string | boolean
   priority_label?: string
   /** helper = Ticketing Helper (manpower/field), system = Ticketing System (Odoo/P2H/Job Portal) */
@@ -44,6 +45,8 @@ export interface Ticket {
   /** Admin sudah selesai, menunggu user konfirmasi */
   waiting_user_confirmation?: boolean
   resolution_confirmed?: boolean
+  attachment_count?: number
+  message_count?: number
   stage?: { id: number; name: string } | null
   team?: { id: number; name: string } | null
   category?: { id: number; name: string } | null

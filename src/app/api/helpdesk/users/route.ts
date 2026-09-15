@@ -149,3 +149,128 @@ export async function PUT(request: NextRequest) {
     )
   }
 }
+
+/**
+ * DELETE /api/helpdesk/users?id=... - Delete employee and their roles
+ * Hanya bisa dilakukan oleh SUPER_ADMIN
+ */
+export async function DELETE(request: NextRequest) {
+  const payload = verifyRequest(request.headers.get("authorization"))
+  if (!payload) {
+    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 })
+  }
+
+  // Super Admin check
+  if (!payload.roles.includes("SUPER_ADMIN") && !payload.isSuperAdmin) {
+    return NextResponse.json(
+      { success: false, message: "Hanya Super Admin yang memiliki hak menghapus pengguna." },
+      { status: 403 }
+    )
+  }
+
+  const url = new URL(request.url)
+  const idParam = url.searchParams.get("id")
+  const employeeId = idParam ? parseInt(idParam, 10) : null
+
+  if (!employeeId || isNaN(employeeId)) {
+    return NextResponse.json(
+      { success: false, message: "Parameter ID pengguna tidak valid." },
+      { status: 400 }
+    )
+  }
+
+  // Prevent self-deletion
+  if (payload.employeeId === employeeId) {
+    return NextResponse.json(
+      { success: false, message: "Anda tidak dapat menghapus akun Anda sendiri." },
+      { status: 400 }
+    )
+  }
+
+  try {
+    const targetEmp = await prisma.employee.findUnique({
+      where: { id: employeeId },
+    })
+
+    if (!targetEmp) {
+      return NextResponse.json(
+        { success: false, message: "Pengguna tidak ditemukan." },
+        { status: 404 }
+      )
+    }
+
+    if (targetEmp.isSuperAdmin || targetEmp.nik === "1.1025.274") {
+      return NextResponse.json(
+        { success: false, message: "Akun Super Admin utama tidak dapat dihapus." },
+        { status: 400 }
+      )
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Unassign tickets where this employee is assigned
+      await tx.ticket.updateMany({
+        where: { assignedToId: employeeId },
+        data: { assignedToId: null },
+      })
+
+      // 2. Find tickets created by this employee
+      const userTickets = await tx.ticket.findMany({
+        where: { createdById: employeeId },
+        select: { id: true },
+      })
+      const userTicketIds = userTickets.map((t) => t.id)
+
+      if (userTicketIds.length > 0) {
+        // Delete attachments for tickets created by user
+        await tx.attachment.deleteMany({
+          where: { ticketId: { in: userTicketIds } },
+        })
+        // Delete messages for tickets created by user
+        await tx.ticketMessage.deleteMany({
+          where: { ticketId: { in: userTicketIds } },
+        })
+        // Delete the tickets
+        await tx.ticket.deleteMany({
+          where: { id: { in: userTicketIds } },
+        })
+      }
+
+      // 3. Delete any messages authored by this user on other tickets
+      await tx.ticketMessage.deleteMany({
+        where: { authorId: employeeId },
+      })
+
+      // 4. Delete team memberships
+      await tx.teamMember.deleteMany({
+        where: { employeeId },
+      })
+
+      // 5. Delete roles
+      await tx.userRole.deleteMany({
+        where: { employeeId },
+      })
+
+      // 6. Delete login logs
+      await tx.loginLog.deleteMany({
+        where: { employeeId },
+      })
+
+      // 7. Delete employee record
+      await tx.employee.delete({
+        where: { id: employeeId },
+      })
+    })
+
+    return NextResponse.json({
+      success: true,
+      message: `Pengguna ${targetEmp.name} (${targetEmp.nik}) berhasil dihapus dari sistem Helpdesk.`,
+    })
+  } catch (error) {
+    console.error("[Users Delete] Error:", error)
+    return NextResponse.json(
+      { success: false, message: "Terjadi kesalahan saat menghapus pengguna." },
+      { status: 500 }
+    )
+  }
+}
+

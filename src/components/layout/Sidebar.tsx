@@ -6,10 +6,12 @@ import { cn } from "@/lib/utils"
 import {
   LayoutDashboard,
   Ticket,
+  Users,
   LogOut,
   User,
   ShieldCheck,
   Database,
+  Activity,
 } from "lucide-react"
 import { useAuthStore } from "@/store/authStore"
 import { useRouter } from "next/navigation"
@@ -39,6 +41,11 @@ const adminMenuItems = [
     title: "Master Data",
     href: "/admin/master-data",
     icon: Database,
+  },
+  {
+    title: "Audit Log",
+    href: "/admin/audit-logs",
+    icon: Activity,
   },
 ]
 

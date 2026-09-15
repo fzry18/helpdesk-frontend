@@ -6,6 +6,7 @@ import {
   upsertEmployee,
   getLocalRbac,
   signJwt,
+  setOdooSession,
 } from "@/lib/serverAuth"
 
 export const dynamic = "force-dynamic"
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Upsert employee to local DB
-    await upsertEmployee({
+    const empRecord = await upsertEmployee({
       employee_id: d.employee_id,
       nik: d.nik,
       name: d.name,
@@ -115,6 +116,11 @@ export async function POST(request: NextRequest) {
     // 4. Get local RBAC roles & permissions
     const { roles, permissions } = await getLocalRbac(d.employee_id, isSuperAdmin)
 
+    // Store active Odoo session token
+    if (odooToken) {
+      setOdooSession(d.employee_id, odooToken)
+    }
+
     // 5. Sign JWT token
     const token = signJwt({
       employeeId: d.employee_id,
@@ -123,6 +129,7 @@ export async function POST(request: NextRequest) {
       isSuperAdmin,
       roles,
       permissions,
+      odooToken,
     })
 
     // 6. Log the login
@@ -153,16 +160,17 @@ export async function POST(request: NextRequest) {
         access_token: token,
         token_type: "Bearer",
         employee: {
-          id: d.employee_id,
-          name: d.name,
-          nik: d.nik,
-          email: d.email || "",
-          phone: d.phone || "",
-          department_id: d.department_id || null,
-          department: d.department || "",
-          job_title: d.job_title || "",
+          id: empRecord.id,
+          name: empRecord.name,
+          nik: empRecord.nik,
+          email: empRecord.email || "",
+          phone: empRecord.phone || "",
+          department_id: empRecord.departmentId || null,
+          department: empRecord.department || "",
+          job_title: empRecord.jobTitle || "",
+          operating_unit: empRecord.operatingUnit || d.operating_unit || "",
           is_manager: isSuperAdmin || roles.includes("ADMIN_IT_SUPPORT"),
-          helpdesk_username: d.nik,
+          helpdesk_username: empRecord.nik,
         },
         roles,
         permissions,

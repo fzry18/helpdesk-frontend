@@ -5,6 +5,16 @@ import { prisma } from "@/lib/prisma"
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
+function checkPermission(payload: any) {
+  return (
+    payload &&
+    (payload.isSuperAdmin ||
+      payload.roles?.includes("SUPER_ADMIN") ||
+      payload.roles?.includes("ADMIN_IT_SUPPORT") ||
+      payload.permissions?.includes("master:manage"))
+  )
+}
+
 export async function GET(request: NextRequest) {
   const payload = verifyRequest(request.headers.get("authorization"))
   if (!payload) {
@@ -40,15 +50,107 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const payload = verifyRequest(request.headers.get("authorization"))
-  if (!payload || !payload.permissions.includes("master:manage")) {
+  if (!checkPermission(payload)) {
     return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 })
   }
-  const body = await request.json()
-  const team = await prisma.team.create({
-    data: { name: body.name, email: body.email || null },
-  })
-  return NextResponse.json({
-    success: true,
-    data: { id: team.id, name: team.name, email: team.email },
-  })
+  try {
+    const body = await request.json()
+    if (!body.name || !body.name.trim()) {
+      return NextResponse.json({ success: false, message: "Nama tim wajib diisi." }, { status: 400 })
+    }
+    const team = await prisma.team.create({
+      data: { name: body.name.trim(), email: body.email?.trim() || null },
+    })
+    return NextResponse.json({
+      success: true,
+      message: `Tim '${team.name}' berhasil ditambahkan.`,
+      data: { id: team.id, name: team.name, email: team.email },
+    })
+  } catch (error: any) {
+    console.error("[Create Team Error]:", error)
+    return NextResponse.json(
+      { success: false, message: error.message || "Gagal membuat tim" },
+      { status: 500 }
+    )
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  const payload = verifyRequest(request.headers.get("authorization"))
+  if (!checkPermission(payload)) {
+    return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 })
+  }
+  try {
+    const body = await request.json()
+    const id = parseInt(body.id, 10)
+    if (!id || isNaN(id)) {
+      return NextResponse.json({ success: false, message: "ID tim tidak valid." }, { status: 400 })
+    }
+    if (!body.name || !body.name.trim()) {
+      return NextResponse.json({ success: false, message: "Nama tim wajib diisi." }, { status: 400 })
+    }
+    const team = await prisma.team.update({
+      where: { id },
+      data: {
+        name: body.name.trim(),
+        email: body.email !== undefined ? (body.email?.trim() || null) : undefined,
+      },
+    })
+    return NextResponse.json({
+      success: true,
+      message: `Tim '${team.name}' berhasil diperbarui.`,
+      data: { id: team.id, name: team.name, email: team.email },
+    })
+  } catch (error: any) {
+    console.error("[Update Team Error]:", error)
+    return NextResponse.json(
+      { success: false, message: error.message || "Gagal memperbarui tim" },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const payload = verifyRequest(request.headers.get("authorization"))
+  if (!checkPermission(payload)) {
+    return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 })
+  }
+  const url = new URL(request.url)
+  const idParam = url.searchParams.get("id")
+  const id = idParam ? parseInt(idParam, 10) : null
+  if (!id || isNaN(id)) {
+    return NextResponse.json({ success: false, message: "ID tim tidak valid." }, { status: 400 })
+  }
+
+  try {
+    const existing = await prisma.team.findUnique({ where: { id } })
+    if (!existing) {
+      return NextResponse.json({ success: false, message: "Tim tidak ditemukan." }, { status: 404 })
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // Unlink tickets referencing this team
+      await tx.ticket.updateMany({
+        where: { teamId: id },
+        data: { teamId: null },
+      })
+      // Delete team members
+      await tx.teamMember.deleteMany({
+        where: { teamId: id },
+      })
+      // Delete team
+      await tx.team.delete({ where: { id } })
+    })
+
+    return NextResponse.json({
+      success: true,
+      message: `Tim '${existing.name}' berhasil dihapus.`,
+    })
+  } catch (error: any) {
+    console.error("[Delete Team Error]:", error)
+    return NextResponse.json(
+      { success: false, message: error.message || "Gagal menghapus tim" },
+      { status: 500 }
+    )
+  }
 }
