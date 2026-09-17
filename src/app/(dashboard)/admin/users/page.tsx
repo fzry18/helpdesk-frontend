@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { apiClient } from "@/lib/api/client"
 import { useAuthStore } from "@/store/authStore"
@@ -85,9 +86,15 @@ const ROLE_CONFIG: Record<
 }
 
 export default function UsersManagementPage() {
+  const router = useRouter()
   const queryClient = useQueryClient()
   const { hasRole, employee: currentEmployee } = useAuthStore()
   const isSuperAdmin = hasRole("SUPER_ADMIN")
+  const [isHydrated, setIsHydrated] = useState(false)
+
+  useEffect(() => {
+    setIsHydrated(true)
+  }, [])
 
   const [search, setSearch] = useState("")
   const [roleFilter, setRoleFilter] = useState("ALL")
@@ -111,6 +118,7 @@ export default function UsersManagementPage() {
       )
       return res.data || []
     },
+    enabled: isSuperAdmin,
   })
 
   // Search Odoo employees query
@@ -121,13 +129,16 @@ export default function UsersManagementPage() {
   } = useQuery({
     queryKey: ["odoo-search", odooQuery],
     queryFn: async () => {
-      if (odooQuery.length < 2) return []
+      const trimmed = odooQuery.trim()
+      if (trimmed.length < 2) return []
+      const isNik = /^[\d\.]+$/.test(trimmed)
+      const paramKey = isNik ? "f_nik" : "f_name"
       const res = await apiClient.get<{ success: boolean; data: OdooEmployee[] }>(
-        `/users/search-odoo?q=${encodeURIComponent(odooQuery)}`
+        `/users/search-odoo?${paramKey}=${encodeURIComponent(trimmed)}`
       )
       return res.data || []
     },
-    enabled: odooQuery.length >= 2,
+    enabled: odooQuery.trim().length >= 2,
     retry: false,
   })
 
@@ -206,6 +217,31 @@ export default function UsersManagementPage() {
     },
   })
 
+  if (!isHydrated) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (!isSuperAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6">
+        <div className="rounded-full bg-destructive/10 p-4 mb-4 text-destructive">
+          <AlertCircle className="h-8 w-8" />
+        </div>
+        <h2 className="text-xl font-bold">Akses Ditolak</h2>
+        <p className="text-sm text-muted-foreground mt-1 max-w-md">
+          Halaman Manajemen Pengguna & Role RBAC hanya dapat diakses oleh Super Admin.
+        </p>
+        <Button className="mt-4" onClick={() => router.push("/dashboard")}>
+          Kembali ke Dashboard
+        </Button>
+      </div>
+    )
+  }
+
   const users = usersData || []
 
   return (
@@ -215,11 +251,11 @@ export default function UsersManagementPage() {
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-7 w-7 text-primary" />
             <h1 className="text-3xl font-bold tracking-tight">
-              Manajemen Pengguna & Role
+              Manajemen Pengguna & Staf
             </h1>
           </div>
           <p className="text-muted-foreground mt-1">
-            Kelola peran 4-tier helpdesk: Super Admin, Admin IT Support, IT Support, dan User
+            Kelola hak akses staf penangan tiket (Super Admin, Admin IT Support, IT Support) dan penetapan role RBAC
           </p>
         </div>
 
@@ -360,8 +396,6 @@ export default function UsersManagementPage() {
                               </Select>
 
                               {!(
-                                u.nik === "1.1025.274" ||
-                                u.is_super_admin ||
                                 currentEmployee?.id === u.id ||
                                 currentEmployee?.nik === u.nik
                               ) ? (
@@ -379,12 +413,7 @@ export default function UsersManagementPage() {
                                   variant="ghost"
                                   size="icon"
                                   className="h-8 w-8 text-muted-foreground/30 cursor-not-allowed"
-                                  title={
-                                    currentEmployee?.id === u.id ||
-                                    currentEmployee?.nik === u.nik
-                                      ? "Akun Anda sendiri tidak dapat dihapus"
-                                      : "Akun Super Admin tidak dapat dihapus"
-                                  }
+                                  title="Akun Anda sendiri tidak dapat dihapus"
                                   disabled
                                 >
                                   <Trash2 className="h-4 w-4" />
@@ -569,17 +598,17 @@ export default function UsersManagementPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
               <Trash2 className="h-5 w-5" />
-              Hapus Pengguna
+              Cabut Hak Akses Staf
             </DialogTitle>
             <DialogDescription className="pt-2 text-foreground/80">
-              Apakah Anda yakin ingin menghapus pengguna{" "}
+              Apakah Anda yakin ingin mencabut hak akses staf untuk{" "}
               <strong className="text-foreground">{deleteTargetUser?.name}</strong>{" "}
-              (NIK: {deleteTargetUser?.nik}) dari Helpdesk?
+              (NIK: {deleteTargetUser?.nik})?
             </DialogDescription>
           </DialogHeader>
 
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
-            Peran dan hak akses pengguna ini akan dihapus dari sistem. Karyawan tetap dapat login kembali dari Odoo sebagai User biasa jika diperlukan di masa depan.
+            Peran staf dan keanggotaan tim Helpdesk akan dicabut. Pengguna akan dikembalikan menjadi User biasa (pelapor tiket), dan seluruh riwayat tiket masa lalunya akan tetap tersimpan secara aman.
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
@@ -603,12 +632,12 @@ export default function UsersManagementPage() {
               {deleteUserMutation.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Menghapus...
+                  Memproses...
                 </>
               ) : (
                 <>
                   <Trash2 className="h-4 w-4" />
-                  Ya, Hapus Pengguna
+                  Cabut Akses Staf
                 </>
               )}
             </Button>

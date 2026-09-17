@@ -44,19 +44,28 @@ export async function GET(request: NextRequest) {
   }
 
   // Queue tab filtering
-  if (queue === "my_assigned") {
-    where.assignedToId = payload.employeeId
-    where.status = "open"
-  } else if (queue === "unassigned") {
-    where.assignedToId = null
-    where.status = "open"
-  } else if (queue === "waiting_confirmation") {
-    where.waitingUserConfirmation = true
-    where.status = "open"
-  } else if (queue === "active") {
-    where.status = "open"
-  } else if (queue === "closed") {
-    where.status = "closed"
+  if (canViewAll) {
+    if (queue === "my_assigned") {
+      where.assignedToId = payload.employeeId
+      where.status = "open"
+    } else if (queue === "unassigned") {
+      where.assignedToId = null
+      where.status = "open"
+    } else if (queue === "waiting_confirmation") {
+      where.waitingUserConfirmation = true
+      where.status = "open"
+    } else if (queue === "active") {
+      where.status = "open"
+    } else if (queue === "closed") {
+      where.status = "closed"
+    }
+  } else {
+    // Karyawan biasa (USER) hanya memfilter tiket aktif vs selesai miliknya
+    if (queue === "closed" || status === "closed") {
+      where.status = "closed"
+    } else {
+      where.status = "open"
+    }
   }
 
   // Generic status filter (if not already set by queue)

@@ -106,6 +106,14 @@ export interface Message {
   message_type?: string
   is_internal?: boolean
   internal?: boolean
+  attachments?: Array<{
+    id: number
+    name: string
+    filename: string
+    mimetype: string
+    file_size: number
+    url: string
+  }>
 }
 
 export interface ApiResponse<T> {

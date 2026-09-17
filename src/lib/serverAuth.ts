@@ -63,6 +63,8 @@ export function verifyJwt(token: string): JwtPayload {
 
 export interface OdooLoginResult {
   success: boolean
+  status?: number
+  code?: string
   data?: {
     employee_id: number
     nik: string
@@ -98,77 +100,99 @@ export async function loginToOdoo(
   formData.append("password", password)
   formData.append("ttl_hours", "24")
 
-  const response = await serverAxios.post(
-    `${ODOO_BASE_URL}/api/v1/auth/employee-login`,
-    formData.toString(),
-    {
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
+  try {
+    const response = await serverAxios.post(
+      `${ODOO_BASE_URL}/api/v1/auth/employee-login`,
+      formData.toString(),
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "X-API-Key": ODOO_API_KEY,
+        },
+      }
+    )
+
+    const result: OdooLoginResult = response.data
+    if (!result.success || !result.data) {
+      return result
+    }
+
+    const token = result.data.token || result.data.access_token
+
+    if (token) {
+      const authHeaders = {
+        Authorization: `Bearer ${token}`,
         "X-API-Key": ODOO_API_KEY,
-      },
-    }
-  )
-
-  const result: OdooLoginResult = response.data
-  if (!result.success || !result.data) {
-    return result
-  }
-
-  const token = result.data.token || result.data.access_token
-
-  if (token) {
-    const authHeaders = { Authorization: `Bearer ${token}` }
-
-    // 1. Ambil Profile Me (/api/v1/auth/me) sesuai dokumentasi Postman
-    try {
-      const meRes = await serverAxios.get(`${ODOO_BASE_URL}/api/v1/auth/me`, {
-        headers: authHeaders,
-      })
-      const meData = meRes.data?.data || meRes.data
-      if (meData && typeof meData === "object") {
-        if (meData.department && !result.data.department) result.data.department = meData.department
-        if (meData.department_id && !result.data.department_id) result.data.department_id = meData.department_id
-        if (meData.job_title && !result.data.job_title) result.data.job_title = meData.job_title
-        if (meData.email && !result.data.email) result.data.email = meData.email
-        if (meData.phone && !result.data.phone) result.data.phone = meData.phone
-        if (meData.operating_unit && !result.data.operating_unit) result.data.operating_unit = meData.operating_unit
       }
-    } catch (meErr) {
-      console.warn("[loginToOdoo] Failed to fetch /api/v1/auth/me:", meErr)
-    }
 
-    // 2. Ambil detail karyawan (/api/v1/employee?f_nik=...) jika departemen / jabatan belum lengkap
-    if (!result.data.department || !result.data.job_title) {
+      // 1. Ambil Profile Me (/api/v1/auth/me) sesuai dokumentasi Postman
       try {
-        const empRes = await serverAxios.get(
-          `${ODOO_BASE_URL}/api/v1/employee?f_nik=${encodeURIComponent(nik)}`,
-          { headers: authHeaders }
-        )
-        const empData = empRes.data?.data
-        const empList = Array.isArray(empData) ? empData : empData ? [empData] : []
-        if (empList.length > 0) {
-          const emp = empList[0]
-          const dept = Array.isArray(emp.department_id) ? emp.department_id[1] : (emp.department || emp.department_name)
-          const job = Array.isArray(emp.job_id) ? emp.job_id[1] : (emp.job_title || emp.job_name)
-          const unit = Array.isArray(emp.operating_unit_id) ? emp.operating_unit_id[1] : emp.operating_unit
-
-          if (dept && !result.data.department) result.data.department = dept
-          if (job && !result.data.job_title) result.data.job_title = job
-          if (unit && !result.data.operating_unit) result.data.operating_unit = unit
-          if (emp.work_email && !result.data.email) result.data.email = emp.work_email
-          if (emp.work_phone && !result.data.phone) result.data.phone = emp.work_phone
+        const meRes = await serverAxios.get(`${ODOO_BASE_URL}/api/v1/auth/me`, {
+          headers: authHeaders,
+        })
+        const meData = meRes.data?.data || meRes.data
+        if (meData && typeof meData === "object") {
+          if (meData.department && !result.data.department) result.data.department = meData.department
+          if (meData.department_id && !result.data.department_id) result.data.department_id = meData.department_id
+          if (meData.job_title && !result.data.job_title) result.data.job_title = meData.job_title
+          if (meData.email && !result.data.email) result.data.email = meData.email
+          if (meData.phone && !result.data.phone) result.data.phone = meData.phone
+          if (meData.operating_unit && !result.data.operating_unit) result.data.operating_unit = meData.operating_unit
         }
-      } catch (empErr) {
-        console.warn("[loginToOdoo] Failed to fetch /api/v1/employee:", empErr)
+      } catch (meErr) {
+        console.warn("[loginToOdoo] Failed to fetch /api/v1/auth/me:", meErr)
+      }
+
+      // 2. Ambil detail karyawan (/api/v1/employee?f_nik=...) jika departemen / jabatan belum lengkap
+      if (!result.data.department || !result.data.job_title) {
+        try {
+          const empRes = await serverAxios.get(
+            `${ODOO_BASE_URL}/api/v1/employee?f_nik=${encodeURIComponent(nik)}`,
+            { headers: authHeaders }
+          )
+          const empData = empRes.data?.data
+          const empList = Array.isArray(empData) ? empData : empData ? [empData] : []
+          if (empList.length > 0) {
+            const emp = empList[0]
+            const dept = Array.isArray(emp.department_id) ? emp.department_id[1] : (emp.department || emp.department_name)
+            const job = Array.isArray(emp.job_id) ? emp.job_id[1] : (emp.job_title || emp.job_name)
+            const unit = Array.isArray(emp.operating_unit) ? emp.operating_unit[1] : (Array.isArray(emp.operating_unit_id) ? emp.operating_unit_id[1] : emp.operating_unit)
+
+            if (dept && !result.data.department) result.data.department = dept
+            if (job && !result.data.job_title) result.data.job_title = job
+            if (unit && !result.data.operating_unit) result.data.operating_unit = unit
+            if (emp.work_email && !result.data.email) result.data.email = emp.work_email
+            if (emp.work_phone && !result.data.phone) result.data.phone = emp.work_phone
+          }
+        } catch (empErr) {
+          console.warn("[loginToOdoo] Failed to fetch /api/v1/employee:", empErr)
+        }
       }
     }
-  }
 
-  return result
+    return result
+  } catch (err: any) {
+    const status = err.response?.status || 500
+    const message = err.response?.data?.message || err.message || "Gagal login ke Odoo."
+    const isDefault =
+      status === 409 ||
+      message.toLowerCase().includes("default") ||
+      message.toLowerCase().includes("wajib ganti")
+
+    return {
+      success: false,
+      status,
+      code: isDefault ? "DEFAULT_PASSWORD" : err.response?.data?.code || "LOGIN_ERROR",
+      message,
+    }
+  }
 }
 
 /**
  * Check if employee has admin/super_admin access for helpdesk app in Odoo.
+ * Sesuai keputusan interview:
+ * Siapapun yang di-set di Odoo app-access (app_name: helpdesk, is_admin: true)
+ * menjadi SUPER_ADMIN di Helpdesk.
  */
 export async function checkOdooAppAccess(
   odooToken: string,
@@ -195,21 +219,81 @@ export async function checkOdooAppAccess(
       )
 
       if (userAccess) {
+        // Di Odoo app-access hanya ada flag is_admin; jika is_admin=true maka dia Super Admin di Helpdesk
+        const isAdmin = Boolean(userAccess.is_admin)
         return {
-          isAdmin: Boolean(userAccess.is_admin || userAccess.is_super_admin),
-          isSuperAdmin: Boolean(userAccess.is_super_admin),
+          isAdmin,
+          isSuperAdmin: isAdmin,
         }
       }
-
-      // If user isn't found by exact match, check general flags if only one record
-      const hasAnySuper = accessList.some((i: any) => i.is_super_admin)
-      const hasAnyAdmin = accessList.some((i: any) => i.is_admin)
-      return { isAdmin: hasAnyAdmin || hasAnySuper, isSuperAdmin: hasAnySuper }
     }
     return { isAdmin: false, isSuperAdmin: false }
-  } catch (error) {
-    console.warn("[checkOdooAppAccess] Failed to check app-access:", error)
+  } catch (error: any) {
+    // 403 Forbidden adalah kondisi normal bagi karyawan biasa yang tidak memiliki wewenang cek app-access Odoo
+    if (error?.response?.status !== 403) {
+      console.warn("[checkOdooAppAccess] Note on app-access check:", error?.message || error)
+    }
     return { isAdmin: false, isSuperAdmin: false }
+  }
+}
+
+/**
+ * Sinkronisasi dua arah ke Odoo Live app-access untuk app_name: helpdesk
+ */
+export async function syncOdooAppAccess(
+  odooToken: string,
+  employeeId: number,
+  nik: string,
+  isSuperAdmin: boolean
+) {
+  try {
+    const headers = {
+      "X-API-Key": ODOO_API_KEY,
+      Authorization: `Bearer ${odooToken}`,
+    }
+
+    // 1. Ambil daftar app-access helpdesk yang sudah ada
+    const listRes = await serverAxios.get(
+      `${ODOO_BASE_URL}/api/v1/app-access?app_name=helpdesk`,
+      { headers }
+    )
+    const listData = listRes.data?.data
+    const accessList: any[] = Array.isArray(listData) ? listData : listData ? [listData] : []
+    const existing = accessList.find(
+      (item) => item.employee_id === employeeId || item.nik === nik
+    )
+
+    if (isSuperAdmin) {
+      if (!existing) {
+        // Tambahkan ke app-access Odoo
+        const params = new URLSearchParams()
+        params.set("employee_id", String(employeeId))
+        params.set("nik", nik)
+        params.set("app_name", "helpdesk")
+        params.set("is_admin", "1")
+
+        await serverAxios.post(
+          `${ODOO_BASE_URL}/api/v1/app-access`,
+          params.toString(),
+          {
+            headers: {
+              ...headers,
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+          }
+        )
+      }
+    } else {
+      if (existing && existing.id) {
+        // Hapus dari app-access Odoo
+        await serverAxios.delete(
+          `${ODOO_BASE_URL}/api/v1/app-access/${existing.id}`,
+          { headers }
+        )
+      }
+    }
+  } catch (err: any) {
+    console.warn("[syncOdooAppAccess] Sync warning:", err.response?.status, err.response?.data || err.message)
   }
 }
 

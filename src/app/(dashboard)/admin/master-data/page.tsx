@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { apiClient } from "@/lib/api/client"
 import { useAuthStore } from "@/store/authStore"
@@ -35,6 +36,7 @@ import {
   UserPlus,
   Pencil,
   Trash2,
+  AlertCircle,
 } from "lucide-react"
 
 interface CategoryItem {
@@ -69,12 +71,18 @@ interface StageItem {
 }
 
 export default function MasterDataPage() {
+  const router = useRouter()
   const queryClient = useQueryClient()
   const { hasPermission, hasRole } = useAuthStore()
   const canManage =
     hasRole("SUPER_ADMIN") ||
     hasRole("ADMIN_IT_SUPPORT") ||
     hasPermission("master:manage")
+  const [isHydrated, setIsHydrated] = useState(false)
+
+  useEffect(() => {
+    setIsHydrated(true)
+  }, [])
 
   const [activeTab, setActiveTab] = useState<"categories" | "teams" | "stages">(
     "categories"
@@ -385,6 +393,31 @@ export default function MasterDataPage() {
   const currentMemberIds = new Set(currentTeamMembers.map((m) => m.id))
   const allEmps = (allEmployeesData as any[]) || []
   const availableEmployees = allEmps.filter((e) => !currentMemberIds.has(e.id))
+
+  if (!isHydrated) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (!canManage) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6">
+        <div className="rounded-full bg-destructive/10 p-4 mb-4 text-destructive">
+          <AlertCircle className="h-8 w-8" />
+        </div>
+        <h2 className="text-xl font-bold">Akses Ditolak</h2>
+        <p className="text-sm text-muted-foreground mt-1 max-w-md">
+          Halaman Master Data hanya dapat diakses oleh Super Admin dan Admin IT Support.
+        </p>
+        <Button className="mt-4" onClick={() => router.push("/dashboard")}>
+          Kembali ke Dashboard
+        </Button>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">

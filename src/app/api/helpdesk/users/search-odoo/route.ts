@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { verifyRequest, getOdooSession } from "@/lib/serverAuth"
+import { verifyRequest, getOdooSession, syncOdooAppAccess } from "@/lib/serverAuth"
 import { serverAxios } from "@/lib/serverAxios"
 import { prisma } from "@/lib/prisma"
 
@@ -16,10 +16,10 @@ function mapOdooEmployee(emp: any) {
   const nik = emp.nik || emp.identification_id || emp.barcode || ""
 
   let department = ""
-  if (typeof emp.department_id === "string") {
-    department = emp.department_id
-  } else if (Array.isArray(emp.department_id) && emp.department_id.length > 1) {
+  if (Array.isArray(emp.department_id) && emp.department_id.length > 1) {
     department = emp.department_id[1]
+  } else if (typeof emp.department_id === "string") {
+    department = emp.department_id
   } else if (emp.department && typeof emp.department === "string") {
     department = emp.department
   } else if (emp.department_name) {
@@ -27,10 +27,10 @@ function mapOdooEmployee(emp: any) {
   }
 
   let jobTitle = ""
-  if (typeof emp.job_id === "string") {
-    jobTitle = emp.job_id
-  } else if (Array.isArray(emp.job_id) && emp.job_id.length > 1) {
+  if (Array.isArray(emp.job_id) && emp.job_id.length > 1) {
     jobTitle = emp.job_id[1]
+  } else if (typeof emp.job_id === "string") {
+    jobTitle = emp.job_id
   } else if (emp.job_title && typeof emp.job_title === "string") {
     jobTitle = emp.job_title
   } else if (emp.job_name) {
@@ -38,12 +38,16 @@ function mapOdooEmployee(emp: any) {
   }
 
   let operatingUnit = ""
-  if (typeof emp.operating_unit_id === "string") {
-    operatingUnit = emp.operating_unit_id
+  if (Array.isArray(emp.operating_unit) && emp.operating_unit.length > 1) {
+    operatingUnit = emp.operating_unit[1]
   } else if (Array.isArray(emp.operating_unit_id) && emp.operating_unit_id.length > 1) {
     operatingUnit = emp.operating_unit_id[1]
+  } else if (typeof emp.operating_unit === "string") {
+    operatingUnit = emp.operating_unit
+  } else if (typeof emp.operating_unit_id === "string") {
+    operatingUnit = emp.operating_unit_id
   } else if (emp.operating_unit) {
-    operatingUnit = typeof emp.operating_unit === "string" ? emp.operating_unit : String(emp.operating_unit)
+    operatingUnit = String(emp.operating_unit)
   }
 
   return {
@@ -57,9 +61,11 @@ function mapOdooEmployee(emp: any) {
 }
 
 /**
- * GET /api/helpdesk/users/search-odoo?q=...
+ * GET /api/helpdesk/users/search-odoo
  * Mencari data karyawan langsung dari Odoo Live
- * Menggunakan endpoint /api/v1/employee?f_name=... sesuai Postman Collection
+ * Sesuai dokumentasi Postman:
+ * - GET /api/v1/employee?f_name=...
+ * - GET /api/v1/employee?f_nik=...
  */
 export async function GET(request: NextRequest) {
   const payload = verifyRequest(request.headers.get("authorization"))
@@ -67,8 +73,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 })
   }
 
-  const q = request.nextUrl.searchParams.get("q") || ""
-  if (!q || q.length < 2) {
+  const { searchParams } = request.nextUrl
+  const fName = searchParams.get("f_name") || searchParams.get("name") || ""
+  const fNik = searchParams.get("f_nik") || searchParams.get("nik") || ""
+  const q = searchParams.get("q") || ""
+
+  // Tentukan parameter pencarian Odoo
+  const queryName = fName || (!fNik && !/^\d+[\d\.]*$/.test(q) ? q : "")
+  const queryNik = fNik || (!fName && /^\d+[\d\.]*$/.test(q) ? q : "")
+
+  if ((!queryName || queryName.length < 2) && (!queryNik || queryNik.length < 2)) {
     return NextResponse.json({ success: true, data: [] })
   }
 
@@ -88,32 +102,35 @@ export async function GET(request: NextRequest) {
   try {
     const headers = {
       Authorization: `Bearer ${odooToken}`,
+      "X-API-Key": ODOO_API_KEY,
     }
 
     const rawList: any[] = []
 
-    // 1. Query /api/v1/employee?f_name=... sesuai dokumentasi Postman
-    try {
-      const resName = await serverAxios.get(
-        `${ODOO_BASE_URL}/api/v1/employee?f_name=${encodeURIComponent(q)}`,
-        { headers }
-      )
-      const data = resName.data?.data
-      if (Array.isArray(data)) {
-        rawList.push(...data)
-      } else if (data && typeof data === "object") {
-        rawList.push(data)
+    // 1. Query /api/v1/employee?f_name=... sesuai Postman Collection line 343
+    if (queryName) {
+      try {
+        const resName = await serverAxios.get(
+          `${ODOO_BASE_URL}/api/v1/employee?f_name=${encodeURIComponent(queryName)}`,
+          { headers }
+        )
+        const data = resName.data?.data
+        if (Array.isArray(data)) {
+          rawList.push(...data)
+        } else if (data && typeof data === "object") {
+          rawList.push(data)
+        }
+      } catch (nameErr: any) {
+        console.warn("[Search Odoo] /api/v1/employee?f_name error:", nameErr.response?.status, nameErr.response?.data || nameErr.message)
       }
-    } catch (nameErr: any) {
-      console.warn("[Search Odoo] /api/v1/employee?f_name error:", nameErr.response?.status, nameErr.response?.data || nameErr.message)
     }
 
-    // 2. Query /api/v1/employee?f_nik=... jika q mengandung angka/titik atau jika nama belum menghasilkan
-    const hasDigits = /\d/.test(q)
-    if (hasDigits || rawList.length === 0) {
+    // 2. Query /api/v1/employee?f_nik=... sesuai Postman Collection
+    if (queryNik || (rawList.length === 0 && queryName && /\d/.test(queryName))) {
+      const nikToQuery = queryNik || queryName
       try {
         const resNik = await serverAxios.get(
-          `${ODOO_BASE_URL}/api/v1/employee?f_nik=${encodeURIComponent(q)}`,
+          `${ODOO_BASE_URL}/api/v1/employee?f_nik=${encodeURIComponent(nikToQuery)}`,
           { headers }
         )
         const data = resNik.data?.data
@@ -123,7 +140,7 @@ export async function GET(request: NextRequest) {
           rawList.push(data)
         }
       } catch (nikErr: any) {
-        // Silently ignore
+        console.warn("[Search Odoo] /api/v1/employee?f_nik error:", nikErr.response?.status, nikErr.response?.data || nikErr.message)
       }
     }
 
@@ -141,6 +158,7 @@ export async function GET(request: NextRequest) {
       success: true,
       data: odooEmployees,
     })
+
   } catch (error: any) {
     const status = error.response?.status || 500
     const message =
@@ -218,6 +236,16 @@ export async function POST(request: NextRequest) {
         roleId: targetRole.id,
       },
     })
+
+    // 2-way sync ke Odoo app-access jika diangkat menjadi Super Admin
+    if (isSuper) {
+      const odooToken = payload.odooToken || getOdooSession(payload.employeeId)
+      if (odooToken && nik) {
+        syncOdooAppAccess(odooToken, employee_id, nik, true).catch((e) =>
+          console.warn("[search-odoo syncOdooAppAccess warning]:", e)
+        )
+      }
+    }
 
     return NextResponse.json({
       success: true,

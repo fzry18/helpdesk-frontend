@@ -28,12 +28,15 @@ export async function POST(request: NextRequest) {
     const odooResult = await loginToOdoo(nik, password)
 
     if (!odooResult.success || !odooResult.data) {
+      const status = odooResult.status || 401
       return NextResponse.json(
         {
           success: false,
+          code: odooResult.code || (status === 409 ? "DEFAULT_PASSWORD" : "LOGIN_FAILED"),
           message: odooResult.message || "Login gagal. Periksa NIK dan password.",
+          nik,
         },
-        { status: 401 }
+        { status }
       )
     }
 
@@ -41,21 +44,17 @@ export async function POST(request: NextRequest) {
     const odooToken = d.token || d.access_token || ""
 
     // 2. Check if user has admin helpdesk access in Odoo
-    // a. NIK seed (1.1025.274 is Super Admin as in stock-taking)
-    // b. Odoo is_super_admin flag
-    // c. managed_apps containing helpdesk
-    // d. Odoo app-access endpoint check
-    let isSuperAdmin = d.nik === "1.1025.274" || d.is_super_admin === true
-    let isOdooAdmin = false
+    // Sesuai keputusan interview:
+    // a. Siapapun yang di-set di Odoo app-access (app_name: helpdesk, is_admin: true) -> Super Admin
+    // b. Jika sudah pernah diset sebagai Super Admin oleh Super Admin lain di DB lokal -> Super Admin
+    // c. Jika managed_apps Odoo mengandung 'helpdesk' -> Super Admin
+    const existingLocalEmp = await prisma.employee.findUnique({
+      where: { id: d.employee_id },
+      select: { isSuperAdmin: true },
+    })
 
-    if (
-      !isSuperAdmin &&
-      Array.isArray(d.managed_apps) &&
-      (d.managed_apps.includes("helpdesk") ||
-        d.managed_apps.includes("Helpdesk"))
-    ) {
-      isSuperAdmin = true
-    }
+    let isSuperAdmin = existingLocalEmp?.isSuperAdmin ?? false
+    let isOdooAdmin = false
 
     if (odooToken) {
       const appAccess = await checkOdooAppAccess(odooToken, d.nik, d.employee_id)
@@ -65,6 +64,15 @@ export async function POST(request: NextRequest) {
       if (appAccess.isAdmin) {
         isOdooAdmin = true
       }
+    }
+
+    if (
+      !isSuperAdmin &&
+      Array.isArray(d.managed_apps) &&
+      (d.managed_apps.includes("helpdesk") ||
+        d.managed_apps.includes("Helpdesk"))
+    ) {
+      isSuperAdmin = true
     }
 
     // 3. Upsert employee to local DB

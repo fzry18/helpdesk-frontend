@@ -38,6 +38,8 @@ import {
   Plus,
   Star,
   AlertTriangle,
+  Eye,
+  ZoomIn,
 } from "lucide-react"
 import Link from "next/link"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -58,13 +60,18 @@ export default function TicketDetailPage({
   const { id } = use(params)
   const ticketId = parseInt(id)
   const queryClient = useQueryClient()
-  const { isManager, hasRole, employee: currentEmployee } = useAuthStore()
+  const { isManager, hasRole, employee: currentEmployee, accessToken } = useAuthStore()
+  const activeToken = accessToken || (typeof window !== "undefined" ? localStorage.getItem("access_token") : null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const [chatAttachments, setChatAttachments] = useState<File[]>([])
   const [followUpOpen, setFollowUpOpen] = useState(false)
   const [satisfactionRating, setSatisfactionRating] = useState<string>("5")
   const [feedbackText, setFeedbackText] = useState<string>("")
+  const [previewAttachment, setPreviewAttachment] = useState<{
+    url: string
+    name: string
+  } | null>(null)
 
   // Subscribe to real-time SSE ticket chat & status updates
   useTicketChat({ ticketId, enabled: !!ticketId })
@@ -449,22 +456,75 @@ export default function TicketDetailPage({
               <CardContent>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {ticket.attachments.map((att: any) => {
-                    const isImg = att.mimetype?.startsWith("image/")
+                    const isImg =
+                      att.mimetype?.startsWith("image/") ||
+                      /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(att.name || att.filename || "")
+                    const previewUrl = activeToken
+                      ? `${att.url}?token=${encodeURIComponent(activeToken)}`
+                      : att.url
+                    const downloadUrl = `${att.url}?${activeToken ? `token=${encodeURIComponent(activeToken)}&` : ""}download=1`
+
+                    if (isImg) {
+                      return (
+                        <div
+                          key={att.id}
+                          className="group relative rounded-xl border bg-muted/30 overflow-hidden"
+                        >
+                          {/* Inline Image Preview */}
+                          <div
+                            className="relative cursor-pointer"
+                            onClick={() => setPreviewAttachment({ url: previewUrl, name: att.name })}
+                          >
+                            <img
+                              src={previewUrl}
+                              alt={att.name}
+                              className="w-full h-44 object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                              loading="lazy"
+                            />
+                            {/* Hover overlay */}
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                              <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 dark:bg-neutral-800/90 rounded-full p-2.5 shadow-lg">
+                                <ZoomIn className="h-5 w-5 text-primary" />
+                              </div>
+                            </div>
+                          </div>
+                          {/* File info bar */}
+                          <div className="flex items-center justify-between p-2.5 text-xs">
+                            <div className="truncate mr-2">
+                              <p className="font-medium truncate">{att.name}</p>
+                              <p className="text-[10px] text-muted-foreground">
+                                {(att.file_size / 1024).toFixed(1)} KB
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                onClick={() => setPreviewAttachment({ url: previewUrl, name: att.name })}
+                                className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-md transition-colors"
+                                title="Lihat Gambar"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </button>
+                              <a
+                                href={downloadUrl}
+                                download={att.name}
+                                className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-md transition-colors"
+                                title="Unduh Lampiran"
+                              >
+                                <Download className="h-4 w-4" />
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    }
+
                     return (
                       <div
                         key={att.id}
                         className="flex items-center justify-between p-3 rounded-xl border bg-muted/30 hover:bg-muted/60 transition-all text-xs"
                       >
                         <div className="flex items-center gap-2.5 truncate">
-                          {isImg ? (
-                            <img
-                              src={att.url}
-                              alt={att.name}
-                              className="h-9 w-9 rounded object-cover border shrink-0"
-                            />
-                          ) : (
-                            <FileIcon className="h-6 w-6 text-muted-foreground shrink-0" />
-                          )}
+                          <FileIcon className="h-6 w-6 text-muted-foreground shrink-0" />
                           <div className="truncate">
                             <p className="font-medium truncate">{att.name}</p>
                             <p className="text-[10px] text-muted-foreground">
@@ -473,9 +533,8 @@ export default function TicketDetailPage({
                           </div>
                         </div>
                         <a
-                          href={att.url}
-                          target="_blank"
-                          rel="noreferrer"
+                          href={downloadUrl}
+                          download={att.name}
                           className="p-1.5 text-primary hover:bg-primary/10 rounded-md shrink-0"
                           title="Unduh / Buka Lampiran"
                         >
@@ -487,6 +546,49 @@ export default function TicketDetailPage({
                 </div>
               </CardContent>
             </Card>
+          )}
+
+          {/* Lightbox: Full-size Image Preview Overlay */}
+          {previewAttachment && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+              onClick={() => setPreviewAttachment(null)}
+            >
+              <div
+                className="relative max-w-4xl w-full max-h-[90vh] flex flex-col items-center"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Close button */}
+                <button
+                  onClick={() => setPreviewAttachment(null)}
+                  className="absolute -top-2 -right-2 z-10 bg-white dark:bg-neutral-800 text-foreground rounded-full p-1.5 shadow-lg hover:bg-muted transition-colors"
+                  title="Tutup"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+                {/* Image */}
+                <img
+                  src={previewAttachment.url}
+                  alt={previewAttachment.name}
+                  className="max-h-[80vh] max-w-full object-contain rounded-lg shadow-2xl"
+                />
+                {/* Caption bar */}
+                <div className="mt-3 flex items-center gap-3 bg-white/10 backdrop-blur-md rounded-lg px-4 py-2">
+                  <p className="text-sm text-white font-medium truncate">
+                    {previewAttachment.name}
+                  </p>
+                  <a
+                    href={`${previewAttachment.url}${previewAttachment.url.includes("?") ? "&" : "?"}download=1`}
+                    download={previewAttachment.name}
+                    className="flex items-center gap-1.5 text-xs text-white/80 hover:text-white bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-md transition-colors shrink-0"
+                    title="Unduh"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Unduh
+                  </a>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Panel Aksi Admin & IT Support */}
@@ -708,91 +810,169 @@ export default function TicketDetailPage({
             </CardContent>
           </Card>
 
-          {/* Obrolan / Chat Thread */}
-          <Card className="flex flex-col h-[520px]">
-            <CardHeader className="py-3 px-4 border-b">
+          {/* Obrolan / Chat Thread — Modern Chat Bubble UI */}
+          <Card className="flex flex-col h-[560px]">
+            <CardHeader className="py-3 px-4 border-b bg-gradient-to-r from-primary/5 to-transparent">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
                 <MessageSquare className="h-4 w-4 text-primary" />
                 Obrolan & Riwayat Penanganan
+                {messages.length > 0 && (
+                  <Badge variant="secondary" className="text-[10px] ml-auto">{messages.length} pesan</Badge>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent className="flex-1 p-0 flex flex-col min-h-0">
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4" style={{ background: "linear-gradient(180deg, hsl(var(--muted)/0.15) 0%, hsl(var(--background)) 100%)" }}>
                 {messagesLoading ? (
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     {[1, 2, 3].map((i) => (
-                      <Skeleton key={i} className="h-16 w-full" />
+                      <div key={i} className={`flex gap-2 ${i % 2 === 0 ? "justify-end" : ""}`}>
+                        {i % 2 !== 0 && <Skeleton className="h-8 w-8 rounded-full shrink-0" />}
+                        <Skeleton className="h-16 w-3/4 rounded-2xl" />
+                        {i % 2 === 0 && <Skeleton className="h-8 w-8 rounded-full shrink-0" />}
+                      </div>
                     ))}
                   </div>
                 ) : messages.length > 0 ? (
-                  messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`rounded-xl border p-3 text-xs space-y-1.5 shadow-sm ${
-                        message.is_internal
-                          ? "bg-amber-50/70 border-amber-200 text-amber-950"
-                          : "bg-background border-border/80"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-semibold text-foreground">
-                          {message.author?.name || "Sistem"}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                          {formatDate(message.date || message.create_date || "")}
-                        </span>
-                      </div>
-                      <p className="whitespace-pre-wrap leading-relaxed text-foreground">
-                        {message.body_plain || message.body?.replace(/<[^>]+>/g, "").trim() || message.body}
-                      </p>
+                  messages.map((message) => {
+                    const isMine = message.author?.id === currentEmployee?.id
+                    const authorInitial = (message.author?.name || "S").charAt(0).toUpperCase()
+                    const hasAttachments = Boolean(message.attachments && message.attachments.length > 0)
+                    const isAttachmentOnlyPlaceholder =
+                      hasAttachments &&
+                      (message.body === "(Lampiran file)" || message.body_plain === "(Lampiran file)")
 
-                      {/* Attachments inside message */}
-                      {message.attachments && message.attachments.length > 0 && (
-                        <div className="pt-1.5 space-y-1">
-                          {message.attachments.map((att) => {
-                            const isImg = att.mimetype?.startsWith("image/")
-                            return (
-                              <div
-                                key={att.id}
-                                className="flex items-center justify-between p-1.5 rounded-lg border bg-muted/40 text-[11px]"
-                              >
-                                <div className="flex items-center gap-2 truncate">
-                                  {isImg ? (
-                                    <img
-                                      src={att.url}
-                                      alt={att.filename}
-                                      className="h-8 w-8 rounded object-cover border shrink-0"
-                                    />
-                                  ) : (
-                                    <FileIcon className="h-4 w-4 text-muted-foreground shrink-0" />
-                                  )}
-                                  <span className="truncate">{att.filename}</span>
-                                </div>
-                                <a
-                                  href={att.url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="p-1 hover:bg-muted rounded text-primary shrink-0"
-                                >
-                                  <ExternalLink className="h-3 w-3" />
-                                </a>
+                    return (
+                      <div
+                        key={message.id}
+                        className={`flex gap-2.5 ${isMine ? "flex-row-reverse" : "flex-row"}`}
+                      >
+                        {/* Avatar */}
+                        <div
+                          className={`h-8 w-8 rounded-full shrink-0 flex items-center justify-center text-xs font-bold shadow-sm ${
+                            isMine
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-gradient-to-br from-blue-500 to-indigo-600 text-white"
+                          }`}
+                          title={message.author?.name || "Sistem"}
+                        >
+                          {authorInitial}
+                        </div>
+
+                        {/* Bubble */}
+                        <div className={`max-w-[80%] min-w-[120px] space-y-1 ${isMine ? "items-end" : "items-start"}`}>
+                          {/* Author name (only for other's messages) */}
+                          {!isMine && (
+                            <p className="text-[10px] font-semibold text-muted-foreground ml-1 mb-0.5">
+                              {message.author?.name || "Sistem"}
+                            </p>
+                          )}
+
+                          <div
+                            className={`rounded-2xl px-3.5 py-2.5 text-xs shadow-sm relative ${
+                              message.is_internal
+                                ? "bg-amber-100/80 border border-amber-300/60 text-amber-950"
+                                : isMine
+                                  ? "bg-primary text-primary-foreground rounded-tr-sm"
+                                  : "bg-card border border-border/60 text-foreground rounded-tl-sm"
+                            }`}
+                          >
+                            {/* Internal badge inline */}
+                            {message.is_internal && (
+                              <div className="flex items-center gap-1 mb-1.5">
+                                <Badge variant="outline" className="text-[9px] bg-amber-200/60 text-amber-800 border-amber-400/50 px-1.5 py-0">
+                                  🔒 Catatan Internal IT
+                                </Badge>
                               </div>
-                            )
-                          })}
-                        </div>
-                      )}
+                            )}
 
-                      {message.is_internal && (
-                        <div className="pt-1">
-                          <Badge variant="outline" className="text-[9px] bg-amber-100 text-amber-800 border-amber-300">
-                            Catatan Internal IT
-                          </Badge>
+                            {/* Message body (hide placeholder text if attachments exist) */}
+                            {!isAttachmentOnlyPlaceholder && (
+                              <p className="whitespace-pre-wrap leading-relaxed break-words">
+                                {message.body_plain || message.body?.replace(/<[^>]+>/g, "").trim() || message.body}
+                              </p>
+                            )}
+
+                            {/* Attachments inside message bubble */}
+                            {hasAttachments && (
+                              <div className={`${!isAttachmentOnlyPlaceholder ? "mt-2" : ""} space-y-1.5`}>
+                                {message.attachments!.map((att) => {
+                                  const isImg =
+                                    att.mimetype?.startsWith("image/") ||
+                                    /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(att.filename || att.name || "")
+                                  const attUrl = activeToken
+                                    ? `${att.url}?token=${encodeURIComponent(activeToken)}`
+                                    : att.url
+                                  const downloadUrl = `${att.url}?${activeToken ? `token=${encodeURIComponent(activeToken)}&` : ""}download=1`
+
+                                  if (isImg) {
+                                    return (
+                                      <div
+                                        key={att.id}
+                                        className="group relative rounded-lg overflow-hidden cursor-pointer bg-black/5"
+                                        onClick={() => setPreviewAttachment({ url: attUrl, name: att.filename })}
+                                      >
+                                        <img
+                                          src={attUrl}
+                                          alt={att.filename}
+                                          className="w-full max-h-52 object-cover rounded-lg transition-transform duration-200 group-hover:scale-[1.02]"
+                                          loading="lazy"
+                                        />
+                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center">
+                                          <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 dark:bg-neutral-800/90 rounded-full p-2 shadow-lg">
+                                            <ZoomIn className="h-4 w-4 text-primary" />
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )
+                                  }
+                                  return (
+                                    <a
+                                      key={att.id}
+                                      href={downloadUrl}
+                                      download={att.filename}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className={`flex items-center gap-2 p-2 rounded-lg text-[11px] transition-colors ${
+                                        isMine
+                                          ? "bg-primary-foreground/10 hover:bg-primary-foreground/20 text-primary-foreground"
+                                          : "bg-muted/50 hover:bg-muted border border-border/40"
+                                      }`}
+                                    >
+                                      <FileIcon className="h-4 w-4 shrink-0" />
+                                      <span className="truncate flex-1">{att.filename}</span>
+                                      <Download className="h-3 w-3 shrink-0 opacity-60" />
+                                    </a>
+                                  )
+                                })}
+                              </div>
+                            )}
+
+                            {/* Timestamp */}
+                            <p className={`text-[10px] mt-1.5 ${
+                              message.is_internal
+                                ? "text-amber-700/70"
+                                : isMine
+                                  ? "text-primary-foreground/60"
+                                  : "text-muted-foreground/80"
+                            } text-right`}>
+                              {formatDate(message.date || message.create_date || "")}
+                            </p>
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  ))
+                      </div>
+                    )
+                  })
                 ) : (
-                  <p className="text-center text-muted-foreground py-10 text-xs">Belum ada obrolan</p>
+                  <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+                    <div className="rounded-full bg-muted/60 p-4">
+                      <MessageSquare className="h-8 w-8 text-muted-foreground/50" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Belum ada obrolan</p>
+                      <p className="text-[11px] text-muted-foreground/70 mt-0.5">Kirim pesan pertama untuk memulai percakapan</p>
+                    </div>
+                  </div>
                 )}
                 <div ref={messagesEndRef} />
               </div>
@@ -800,28 +980,22 @@ export default function TicketDetailPage({
               {/* Chat Input or Closed Message */}
               {!isClosed ? (
                 <form onSubmit={handleSubmit(onSubmit)} className="p-3 border-t bg-muted/20 space-y-2">
-                  <Textarea
-                    placeholder="Tulis pesan atau tanya progres..."
-                    {...register("body")}
-                    className={`text-xs min-h-[50px] max-h-[100px] ${errors.body ? "border-destructive" : ""}`}
-                    rows={2}
-                  />
-
                   {/* Attached files preview */}
                   {chatAttachments.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
                       {chatAttachments.map((f, i) => (
                         <div
                           key={i}
-                          className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-muted border text-[11px]"
+                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-[11px]"
                         >
-                          <span className="truncate max-w-[120px]">{f.name}</span>
+                          <Paperclip className="h-3 w-3 text-primary" />
+                          <span className="truncate max-w-[120px] font-medium">{f.name}</span>
                           <button
                             type="button"
                             onClick={() =>
                               setChatAttachments((prev) => prev.filter((_, idx) => idx !== i))
                             }
-                            className="text-muted-foreground hover:text-destructive"
+                            className="text-muted-foreground hover:text-destructive transition-colors"
                           >
                             <X className="h-3 w-3" />
                           </button>
@@ -830,17 +1004,18 @@ export default function TicketDetailPage({
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
+                  <div className="flex items-end gap-2">
+                    {/* Left: Attachment + Internal checkbox */}
+                    <div className="flex items-center gap-1 shrink-0">
                       <Button
                         type="button"
                         variant="ghost"
-                        size="sm"
+                        size="icon"
                         onClick={() => document.getElementById("chat-file-upload")?.click()}
-                        className="h-8 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                        className="h-9 w-9 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10"
+                        title="Lampiran"
                       >
-                        <Paperclip className="h-3.5 w-3.5" />
-                        Lampiran
+                        <Paperclip className="h-4 w-4" />
                       </Button>
                       <input
                         id="chat-file-upload"
@@ -848,43 +1023,57 @@ export default function TicketDetailPage({
                         multiple
                         className="hidden"
                         onChange={(e) => {
-                          if (e.target.files) {
+                          if (e.target.files && e.target.files.length > 0) {
                             setChatAttachments((prev) => [
                               ...prev,
                               ...Array.from(e.target.files!),
                             ])
+                            e.target.value = ""
                           }
                         }}
                       />
-
-                      {isAdmin && (
-                        <label className="flex items-center gap-1.5 text-[11px] cursor-pointer text-muted-foreground hover:text-foreground">
-                          <input
-                            type="checkbox"
-                            {...register("internal")}
-                            className="rounded border-gray-300"
-                          />
-                          Pesan Internal
-                        </label>
-                      )}
                     </div>
 
+                    {/* Center: Textarea */}
+                    <div className="flex-1 relative">
+                      <Textarea
+                        placeholder="Tulis pesan atau tanya progres..."
+                        {...register("body")}
+                        className={`text-xs min-h-[40px] max-h-[100px] rounded-2xl resize-none pr-3 ${errors.body ? "border-destructive" : ""}`}
+                        rows={1}
+                      />
+                    </div>
+
+                    {/* Right: Send button */}
                     <Button
                       type="submit"
-                      size="sm"
+                      size="icon"
                       disabled={sendMessageMutation.isPending}
-                      className="h-8 text-xs gap-1.5"
+                      className="h-9 w-9 rounded-full shrink-0 bg-primary hover:bg-primary/90 shadow-sm"
+                      title="Kirim"
                     >
-                      <Send className="h-3 w-3" />
-                      Kirim
+                      <Send className="h-4 w-4" />
                     </Button>
                   </div>
+
+                  {/* Internal message checkbox */}
+                  {isAdmin && (
+                    <label className="flex items-center gap-1.5 text-[11px] cursor-pointer text-muted-foreground hover:text-foreground pl-1">
+                      <input
+                        type="checkbox"
+                        {...register("internal")}
+                        className="rounded border-gray-300"
+                      />
+                      🔒 Pesan Internal (hanya staf IT)
+                    </label>
+                  )}
                 </form>
               ) : (
-                <div className="p-3 border-t bg-muted/40 text-center space-y-1.5">
-                  <p className="text-xs text-muted-foreground">
-                    Tiket ini telah berstatus <span className="font-semibold text-emerald-700">Selesai</span>.
-                  </p>
+                <div className="p-4 border-t bg-gradient-to-r from-emerald-50/50 to-transparent text-center space-y-1.5">
+                  <div className="flex items-center justify-center gap-2 text-emerald-700">
+                    <CheckCircle className="h-4 w-4" />
+                    <p className="text-xs font-semibold">Tiket Selesai</p>
+                  </div>
                   <p className="text-[11px] text-muted-foreground">
                     Jika ada kendala baru, silakan gunakan tombol <strong>Buat Tiket Baru Terkait</strong>.
                   </p>

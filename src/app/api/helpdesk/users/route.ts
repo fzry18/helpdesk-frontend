@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { verifyRequest } from "@/lib/serverAuth"
+import { verifyRequest, getOdooSession, syncOdooAppAccess } from "@/lib/serverAuth"
 import { prisma } from "@/lib/prisma"
 
 export const dynamic = "force-dynamic"
@@ -7,11 +7,20 @@ export const runtime = "nodejs"
 
 /**
  * GET /api/helpdesk/users - List employees with roles
+ * Khusus diakses oleh SUPER_ADMIN
  */
 export async function GET(request: NextRequest) {
   const payload = verifyRequest(request.headers.get("authorization"))
   if (!payload) {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 })
+  }
+
+  // Khusus Super Admin
+  if (!payload.roles.includes("SUPER_ADMIN") && !payload.isSuperAdmin) {
+    return NextResponse.json(
+      { success: false, message: "Hanya Super Admin yang memiliki hak mengakses Manajemen Pengguna." },
+      { status: 403 }
+    )
   }
 
   const url = new URL(request.url)
@@ -20,15 +29,36 @@ export async function GET(request: NextRequest) {
 
   try {
     const employees = await prisma.employee.findMany({
-      where: search
-        ? {
+      where: {
+        AND: [
+          // Hanya tampilkan staf (Super Admin ATAU memiliki role staf aktif)
+          {
             OR: [
-              { name: { contains: search, mode: "insensitive" } },
-              { nik: { contains: search, mode: "insensitive" } },
-              { department: { contains: search, mode: "insensitive" } },
+              { isSuperAdmin: true },
+              {
+                userRoles: {
+                  some: {
+                    role: {
+                      slug: { in: ["SUPER_ADMIN", "ADMIN_IT_SUPPORT", "IT_SUPPORT"] },
+                    },
+                  },
+                },
+              },
             ],
-          }
-        : {},
+          },
+          ...(search
+            ? [
+                {
+                  OR: [
+                    { name: { contains: search, mode: "insensitive" as const } },
+                    { nik: { contains: search, mode: "insensitive" as const } },
+                    { department: { contains: search, mode: "insensitive" as const } },
+                  ],
+                },
+              ]
+            : []),
+        ],
+      },
       include: {
         userRoles: {
           include: {
@@ -137,6 +167,18 @@ export async function PUT(request: NextRequest) {
       },
     })
 
+    // 2-way sync ke Odoo app-access jika diubah ke atau dari SUPER_ADMIN
+    const odooToken = payload.odooToken || getOdooSession(payload.employeeId)
+    const empData = await prisma.employee.findUnique({
+      where: { id: employee_id },
+      select: { nik: true },
+    })
+    if (odooToken && empData?.nik) {
+      syncOdooAppAccess(odooToken, employee_id, empData.nik, isSuper).catch((e) =>
+        console.warn("[Users PUT syncOdooAppAccess warning]:", e)
+      )
+    }
+
     return NextResponse.json({
       success: true,
       message: `Role berhasil diubah menjadi ${targetRole.name}.`,
@@ -199,76 +241,49 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    if (targetEmp.isSuperAdmin || targetEmp.nik === "1.1025.274") {
-      return NextResponse.json(
-        { success: false, message: "Akun Super Admin utama tidak dapat dihapus." },
-        { status: 400 }
+    // 2-way sync: hapus dari Odoo app-access jika sebelumnya Super Admin
+    const odooToken = payload.odooToken || getOdooSession(payload.employeeId)
+    if (odooToken && targetEmp.nik) {
+      syncOdooAppAccess(odooToken, employeeId, targetEmp.nik, false).catch((e) =>
+        console.warn("[Users DELETE syncOdooAppAccess warning]:", e)
       )
     }
 
     await prisma.$transaction(async (tx) => {
-      // 1. Unassign tickets where this employee is assigned
+      // 1. Unassign tiket aktif yang sedang ditugaskan ke staf ini
       await tx.ticket.updateMany({
-        where: { assignedToId: employeeId },
+        where: {
+          assignedToId: employeeId,
+          status: { not: "closed" },
+        },
         data: { assignedToId: null },
       })
 
-      // 2. Find tickets created by this employee
-      const userTickets = await tx.ticket.findMany({
-        where: { createdById: employeeId },
-        select: { id: true },
-      })
-      const userTicketIds = userTickets.map((t) => t.id)
-
-      if (userTicketIds.length > 0) {
-        // Delete attachments for tickets created by user
-        await tx.attachment.deleteMany({
-          where: { ticketId: { in: userTicketIds } },
-        })
-        // Delete messages for tickets created by user
-        await tx.ticketMessage.deleteMany({
-          where: { ticketId: { in: userTicketIds } },
-        })
-        // Delete the tickets
-        await tx.ticket.deleteMany({
-          where: { id: { in: userTicketIds } },
-        })
-      }
-
-      // 3. Delete any messages authored by this user on other tickets
-      await tx.ticketMessage.deleteMany({
-        where: { authorId: employeeId },
-      })
-
-      // 4. Delete team memberships
+      // 2. Cabut dari keanggotaan tim penangan (TeamMember)
       await tx.teamMember.deleteMany({
         where: { employeeId },
       })
 
-      // 5. Delete roles
+      // 3. Cabut role khusus staf (UserRole)
       await tx.userRole.deleteMany({
         where: { employeeId },
       })
 
-      // 6. Delete login logs
-      await tx.loginLog.deleteMany({
-        where: { employeeId },
-      })
-
-      // 7. Delete employee record
-      await tx.employee.delete({
+      // 4. Ubah status isSuperAdmin menjadi false
+      await tx.employee.update({
         where: { id: employeeId },
+        data: { isSuperAdmin: false },
       })
     })
 
     return NextResponse.json({
       success: true,
-      message: `Pengguna ${targetEmp.name} (${targetEmp.nik}) berhasil dihapus dari sistem Helpdesk.`,
+      message: `Akses staf untuk ${targetEmp.name} (${targetEmp.nik}) berhasil dicabut. Akun kembali menjadi pengguna biasa (USER) dan riwayat tiket tetap tersimpan.`,
     })
   } catch (error) {
     console.error("[Users Delete] Error:", error)
     return NextResponse.json(
-      { success: false, message: "Terjadi kesalahan saat menghapus pengguna." },
+      { success: false, message: "Terjadi kesalahan saat mencabut akses pengguna." },
       { status: 500 }
     )
   }

@@ -50,6 +50,7 @@ export async function GET(
       },
       include: {
         author: { select: { id: true, name: true, email: true } },
+        attachments: true,
       },
       orderBy: { createdAt: "asc" },
     })
@@ -64,6 +65,14 @@ export async function GET(
       date: m.createdAt.toISOString(),
       create_date: m.createdAt.toISOString(),
       is_internal: m.internal,
+      attachments: m.attachments.map((a) => ({
+        id: a.id,
+        name: a.filename,
+        filename: a.filename,
+        mimetype: a.mimetype,
+        file_size: a.fileSize,
+        url: `/api/helpdesk/attachments/${a.id}`,
+      })),
     }))
 
     return NextResponse.json({ success: true, data: mapped })

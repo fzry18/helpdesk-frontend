@@ -64,10 +64,11 @@ export async function GET(
       return NextResponse.json({ success: false, message: "File not found on disk" }, { status: 404 })
     }
 
-    // Determine inline preview vs download
+    // Determine inline preview vs download (force download if ?download=1)
+    const isDownloadRequested = url.searchParams.get("download") === "1"
     const isImageOrPdf =
       attachment.mimetype.startsWith("image/") || attachment.mimetype === "application/pdf"
-    const disposition = isImageOrPdf ? "inline" : "attachment"
+    const disposition = !isDownloadRequested && isImageOrPdf ? "inline" : "attachment"
 
     return new Response(file.readableWebStream() as any, {
       headers: {

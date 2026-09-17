@@ -1,8 +1,15 @@
 import axios, { AxiosInstance, AxiosError } from "axios"
+import { useAuthStore } from "@/store/authStore"
 
 // Base URL: /api/helpdesk → proxy ke http://localhost:8072/api/helpdesk
 // Auth: POST /api/helpdesk/auth/login, Core: GET /api/helpdesk/dashboard, dll.
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "/api/helpdesk"
+
+// Endpoints autentikasi yang TIDAK boleh memicu auto-logout / redirect saat return 401/409
+const AUTH_ENDPOINTS = [
+  "/auth/login",
+  "/auth/change-password",
+]
 
 class APIClient {
   private client: AxiosInstance
@@ -34,70 +41,48 @@ class APIClient {
     this.client.interceptors.response.use(
       (response) => response,
       async (error: AxiosError) => {
-        const { response, config, message } = error
-
-        // Log error untuk debugging
-        console.error('=== API ERROR ===')
-        console.error('URL:', config?.url)
-        console.error('Full URL:', (config?.baseURL ?? '') + (config?.url ?? ''))
-        console.error('Method:', config?.method)
-        console.error('Status:', response?.status)
-        console.error('Status Text:', response?.statusText)
-        console.error('Error Message:', message)
-        console.error('Response Data:', response?.data)
-        console.error('Has Token:', !!this.getToken())
-        console.error('=================')
+        const { response, config } = error
 
         // 1. Network error (no response dari server)
         if (!response) {
-          console.error('Network error - no response from server')
-          // Jangan redirect - ini network/CORS issue
           return Promise.reject(error)
         }
 
-        // 2. Handle 401 Unauthorized - redirect ke login
-        if (response.status === 401) {
-          this.handleAuthError()
+        const url = config?.url || ""
+        const isAuthEndpoint = AUTH_ENDPOINTS.some((ep) => url.includes(ep))
+
+        // 2. Handle 401 Unauthorized
+        // HANYA lakukan auto-logout/redirect jika:
+        // - Bukan endpoint autentikasi (/auth/login, /auth/change-password)
+        // - Request sebelumnya membawa token (sesi login kadaluarsa)
+        // - Tidak sedang berada di halaman login
+        if (response.status === 401 && !isAuthEndpoint) {
+          const hadToken = !!this.getToken()
+          if (hadToken) {
+            this.handleAuthError()
+          }
         }
 
-        // Untuk semua error, jangan redirect
-        // Biarkan component handle error-nya dengan toast/alert
+        // Biarkan component / React Query onError menangani error secara spesifik melalui UI toast
         return Promise.reject(error)
       }
     )
   }
 
   /**
-   * Cek apakah endpoint adalah public endpoint (tidak perlu auth)
-   */
-  private isPublicEndpoint(url: string): boolean {
-    const publicPaths = [
-      '/categories',
-      '/types',
-      '/teams',
-      '/products',
-      '/stages',
-      '/dashboard',
-      '/tickets', // GET list bisa optional auth
-    ]
-    return publicPaths.some(path => url.includes(path))
-  }
-
-  /**
-   * Handle authentication error - clear token dan redirect
+   * Handle authentication error - clear token dan sinkronkan auth state
    */
   private handleAuthError(): void {
-    console.warn('Handling authentication error - clearing tokens')
-    this.clearToken()
+    try {
+      useAuthStore.getState().logout()
+    } catch {
+      this.clearToken()
+    }
 
     if (typeof window !== "undefined") {
-      // Dispatch custom event untuk auth store/components
-      window.dispatchEvent(new Event('auth-error'))
-
-      // Redirect setelah small delay untuk memastikan cleanup selesai
-      setTimeout(() => {
-        window.location.href = "/login"
-      }, 100)
+      if (window.location.pathname !== "/login") {
+        window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`
+      }
     }
   }
 

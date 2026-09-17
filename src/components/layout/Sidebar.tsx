@@ -60,13 +60,13 @@ export function Sidebar() {
   const displayJobTitle = getJobTitle()
 
   const roles = employee?.roles || []
+  const isSuperAdmin = roles.includes("SUPER_ADMIN") || hasRole("SUPER_ADMIN")
   const isAdminUser =
     isManager() ||
-    roles.includes("SUPER_ADMIN") ||
-    roles.includes("ADMIN_IT_SUPPORT") ||
-    hasRole("SUPER_ADMIN")
+    isSuperAdmin ||
+    roles.includes("ADMIN_IT_SUPPORT")
 
-  const roleBadge = roles.includes("SUPER_ADMIN")
+  const roleBadge = isSuperAdmin
     ? { label: "Super Admin", color: "bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800" }
     : roles.includes("ADMIN_IT_SUPPORT")
     ? { label: "Admin IT Support", color: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-800" }
@@ -119,25 +119,27 @@ export function Sidebar() {
               <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
                 Fitur Admin
               </p>
-              {adminMenuItems.map((item) => {
-                const Icon = item.icon
-                const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                      isActive
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                    )}
-                  >
-                    <Icon className="h-5 w-5" />
-                    {item.title}
-                  </Link>
-                )
-              })}
+              {adminMenuItems
+                .filter((item) => item.href !== "/admin/users" || isSuperAdmin)
+                .map((item) => {
+                  const Icon = item.icon
+                  const isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={cn(
+                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                        isActive
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                      )}
+                    >
+                      <Icon className="h-5 w-5" />
+                      {item.title}
+                    </Link>
+                  )
+                })}
             </div>
           )}
         </nav>
