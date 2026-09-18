@@ -48,12 +48,15 @@ export interface Ticket {
   attachment_count?: number
   message_count?: number
   stage?: { id: number; name: string } | null
-  team?: { id: number; name: string } | null
+  team?: { id: number; name: string; members?: Array<{ id: number; name: string; nik: string; email?: string; jobTitle?: string }> } | null
   category?: { id: number; name: string } | null
   ticket_type?: { id: number; name: string } | null
   customer?: { id: number; name: string; email: string; phone: string } | null
   assigned_user?: { id: number; name: string } | null
   created_by?: { id: number; name: string } | null
+  parent_id?: number | null
+  parent_ticket?: { id: number; ticket_number: string; subject: string } | null
+  related_tickets?: Array<{ id: number; ticket_number: string; subject: string }>
   stage_id?: number
   stage_name?: string
   team_id?: number

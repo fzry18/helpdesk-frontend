@@ -28,6 +28,7 @@ import {
   CheckCircle,
   MessageSquare,
   UserCheck,
+  Users,
   GitBranch,
   Paperclip,
   Download,
@@ -35,6 +36,7 @@ import {
   X,
   Clock,
   ExternalLink,
+  Link2,
   Plus,
   Star,
   AlertTriangle,
@@ -72,6 +74,7 @@ export default function TicketDetailPage({
     url: string
     name: string
   } | null>(null)
+  const [selectedTeamId, setSelectedTeamId] = useState<string>("")
 
   // Subscribe to real-time SSE ticket chat & status updates
   useTicketChat({ ticketId, enabled: !!ticketId })
@@ -97,7 +100,17 @@ export default function TicketDetailPage({
     enabled: !!ticketId,
   })
 
-  // Fetch technicians for assignee switcher
+  // Fetch teams for dispatch dropdown
+  const { data: teamsData } = useQuery({
+    queryKey: ["admin-teams"],
+    queryFn: async () => {
+      const res = await apiClient.get<{ success: boolean; data: any[] }>("/teams")
+      return res.data || []
+    },
+    enabled: !!ticketId,
+  })
+
+  // Fetch technicians for assignee switcher (fallback when ticket has no team members)
   const { data: techData } = useQuery({
     queryKey: ["admin-techs"],
     queryFn: async () => {
@@ -146,6 +159,49 @@ export default function TicketDetailPage({
     onError: (err: any) => {
       toast({
         title: "Gagal Menugaskan",
+        description: err.response?.data?.message || err.message,
+        variant: "destructive",
+      })
+    },
+  })
+
+  // Proceed mutation: atomic team assignment + stage change to In Progress
+  const proceedMutation = useMutation({
+    mutationFn: async (teamId: number) => {
+      // Find the "In Progress" stage (non-starting, non-closing, lowest sequence)
+      const inProgressStage = stagesData?.find(
+        (s: any) => !s.isStarting && !s.is_starting && !s.isClosing && !s.is_closing
+      )
+      return ticketAPI.update(ticketId, {
+        team_id: teamId,
+        stage_id: inProgressStage?.id,
+      } as any)
+    },
+    onSuccess: () => {
+      toast({ title: "Tiket berhasil diproses", description: "Tim telah ditetapkan dan tiket masuk ke tahap In Progress." })
+      queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] })
+      setSelectedTeamId("")
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Gagal Memproses Tiket",
+        description: err.response?.data?.message || err.message,
+        variant: "destructive",
+      })
+    },
+  })
+
+  // Update team mutation (for changing team after initial dispatch)
+  const updateTeamMutation = useMutation({
+    mutationFn: (teamId: number) =>
+      ticketAPI.update(ticketId, { team_id: teamId } as any),
+    onSuccess: () => {
+      toast({ title: "Tim Penanganan Berhasil Diperbarui" })
+      queryClient.invalidateQueries({ queryKey: ["ticket", ticketId] })
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Gagal Mengubah Tim",
         description: err.response?.data?.message || err.message,
         variant: "destructive",
       })
@@ -343,6 +399,10 @@ export default function TicketDetailPage({
   const isAssignedToMe = Boolean(
     ticket.assigned_user?.id && ticket.assigned_user.id === currentEmployee?.id
   )
+  const isCreator = Boolean(
+    currentEmployee?.id &&
+    (ticket.customer?.id === currentEmployee.id || ticket.created_by?.id === currentEmployee.id)
+  )
   const canManageTicket = isSuperAdmin || isAdminIt || isAssignedToMe
 
   const closingStage = stagesData?.find(
@@ -356,6 +416,15 @@ export default function TicketDetailPage({
     ticket.stage?.name?.toLowerCase().includes("selesai")
 
   const waitingConfirmation = ticket.waiting_user_confirmation && !isClosed
+
+  // Dispatch workflow computed values
+  const startingStage = stagesData?.find((s: any) => s.isStarting || s.is_starting)
+  const isNewTicket = !ticket.team_id && (
+    ticket.stage?.name?.toLowerCase() === "new" ||
+    (startingStage && ticket.stage?.id === startingStage.id)
+  )
+  const isDispatcher = isSuperAdmin || isAdminIt
+  const teamMembers = ticket.team?.members || []
 
   // Duration calculations
   const createdDate = new Date(ticket.create_date)
@@ -413,10 +482,38 @@ export default function TicketDetailPage({
                 </Badge>
               )}
             </div>
+
+            {/* Interactive Related Ticket Links */}
+            {(ticket.parent_ticket || (ticket.related_tickets && ticket.related_tickets.length > 0)) && (
+              <div className="flex flex-wrap items-center gap-2 pt-1.5">
+                {ticket.parent_ticket && (
+                  <Link href={`/tickets/${ticket.parent_ticket.id}`}>
+                    <Badge
+                      variant="outline"
+                      className="bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-300 gap-1.5 cursor-pointer py-1 px-2.5 text-xs transition-colors dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800 shadow-sm"
+                    >
+                      <Link2 className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                      <span>Berasal dari Tiket: <strong>#{ticket.parent_ticket.ticket_number}</strong></span>
+                    </Badge>
+                  </Link>
+                )}
+                {ticket.related_tickets?.map((rel: any) => (
+                  <Link key={rel.id} href={`/tickets/${rel.id}`}>
+                    <Badge
+                      variant="outline"
+                      className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-300 gap-1.5 cursor-pointer py-1 px-2.5 text-xs transition-colors dark:bg-indigo-950/30 dark:text-indigo-300 dark:border-indigo-800 shadow-sm"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                      <span>Tiket Lanjutan: <strong>#{rel.ticket_number}</strong></span>
+                    </Badge>
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* If ticket is closed, provide quick CTA to create a related follow-up ticket */}
-          {isClosed && (
+          {/* If ticket is closed and user is the original creator, provide quick CTA to create a related follow-up ticket */}
+          {isClosed && isCreator && (
             <div>
               <Button
                 variant="default"
@@ -601,98 +698,204 @@ export default function TicketDetailPage({
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* 1. Ganti Stage */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                    <GitBranch className="h-3.5 w-3.5 text-primary" />
-                    Ubah Status / Tahapan Tiket
-                  </label>
-                  {canManageTicket ? (
-                    <Select
-                      value={ticket.stage?.id ? String(ticket.stage.id) : undefined}
-                      onValueChange={(val) => updateStageMutation.mutate(parseInt(val))}
-                      disabled={updateStageMutation.isPending}
-                    >
-                      <SelectTrigger className="w-full h-9 text-xs">
-                        <SelectValue placeholder="Pilih status/stage" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {stagesData?.map((s: any) => (
-                          <SelectItem key={s.id} value={String(s.id)}>
-                            {s.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <div className="p-2.5 rounded-lg border bg-muted/40 text-xs text-muted-foreground">
-                      Tiket ini ditugaskan ke <strong className="text-foreground">{ticket.assigned_user?.name || "teknisi lain"}</strong>. Anda dapat melihat percakapan dan catatan teknis, namun hanya teknisi penanggung jawab atau Admin IT yang dapat memproses tahapan tiket ini.
-                    </div>
-                  )}
-                </div>
 
-                {/* 2. Tugaskan Teknisi (Hanya Dispatcher / Super Admin) */}
-                {(isSuperAdmin || isAdminIt) && (
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                      <UserCheck className="h-3.5 w-3.5 text-primary" />
-                      Tugaskan ke Teknisi IT Support (Dispatcher)
-                    </label>
-                    <div className="flex gap-2">
-                      <Select
-                        value={ticket.assigned_user?.id ? String(ticket.assigned_user.id) : undefined}
-                        onValueChange={(val) => assignUserMutation.mutate(parseInt(val))}
-                        disabled={assignUserMutation.isPending}
-                      >
-                        <SelectTrigger className="flex-1 h-9 text-xs">
-                          <SelectValue placeholder="Pilih teknisi IT..." />
+                {/* KONDISI 1: Tiket Baru — Belum Ada Tim (Dispatch) */}
+                {isNewTicket && isDispatcher && (
+                  <div className="space-y-3 p-3 rounded-lg border-2 border-dashed border-primary/30 bg-primary/[0.03]">
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                        Tiket Baru — Pilih Tim Penanganan
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Tiket ini belum dialokasikan ke tim manapun. Pilih tim penanganan lalu klik &quot;Proses / Terima Tiket&quot; untuk memulai penanganan.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
+                        <SelectTrigger className="w-full h-9 text-xs">
+                          <SelectValue placeholder="Pilih Tim Penanganan..." />
                         </SelectTrigger>
                         <SelectContent>
-                          {techData?.map((t: any) => (
+                          {teamsData?.map((t: any) => (
                             <SelectItem key={t.id} value={String(t.id)}>
-                              {t.name} ({t.nik})
+                              {t.name} ({t.member_count} anggota)
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                       <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => assignToMeMutation.mutate()}
-                        disabled={assignToMeMutation.isPending}
-                        className="text-xs h-9 shrink-0"
+                        onClick={() => proceedMutation.mutate(parseInt(selectedTeamId))}
+                        disabled={!selectedTeamId || proceedMutation.isPending}
+                        className="w-full h-9 text-xs gap-2 bg-primary hover:bg-primary/90 shadow-sm"
                       >
-                        Ke Saya
+                        <CheckCircle className="h-4 w-4" />
+                        {proceedMutation.isPending ? "Memproses..." : "Proses / Terima Tiket (Proceed)"}
                       </Button>
                     </div>
                   </div>
                 )}
 
-                {/* 3. Langsung Closed oleh Teknisi (Hasil Grill-Me) */}
-                {canManageTicket && (
-                  <div className="pt-2 border-t flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                    <div>
-                      <p className="text-xs font-medium text-foreground">
-                        Pekerjaan Perbaikan Selesai?
-                      </p>
-                      <p className="text-[11px] text-muted-foreground">
-                        Tutup langsung tiket setelah perbaikan kendala tuntas.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {closingStage && ticket.stage?.id !== closingStage.id && (
-                        <Button
-                          size="sm"
-                          onClick={() => updateStageMutation.mutate(closingStage.id)}
-                          disabled={updateStageMutation.isPending}
-                          className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                {/* KONDISI 2: Tiket Sudah Memiliki Tim — In Progress */}
+                {!isNewTicket && (
+                  <>
+                    {/* Info Tim Saat Ini + Opsi Ganti Tim (Dispatcher Only) */}
+                    {isDispatcher && (
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                          <Users className="h-3.5 w-3.5 text-primary" />
+                          Tim Penanganan
+                        </label>
+                        <Select
+                          value={ticket.team_id ? String(ticket.team_id) : undefined}
+                          onValueChange={(val) => updateTeamMutation.mutate(parseInt(val))}
+                          disabled={updateTeamMutation.isPending}
                         >
-                          <CheckCircle className="h-3.5 w-3.5" />
-                          Tandai Selesai (Closed)
-                        </Button>
+                          <SelectTrigger className="w-full h-9 text-xs">
+                            <SelectValue placeholder="Pilih Tim..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {teamsData?.map((t: any) => (
+                              <SelectItem key={t.id} value={String(t.id)}>
+                                {t.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    {/* Ganti Stage */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                        <GitBranch className="h-3.5 w-3.5 text-primary" />
+                        Ubah Status / Tahapan Tiket
+                      </label>
+                      {canManageTicket ? (
+                        <Select
+                          value={ticket.stage?.id ? String(ticket.stage.id) : undefined}
+                          onValueChange={(val) => updateStageMutation.mutate(parseInt(val))}
+                          disabled={updateStageMutation.isPending}
+                        >
+                          <SelectTrigger className="w-full h-9 text-xs">
+                            <SelectValue placeholder="Pilih status/stage" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {stagesData?.map((s: any) => (
+                              <SelectItem key={s.id} value={String(s.id)}>
+                                {s.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <div className="p-2.5 rounded-lg border bg-muted/40 text-xs text-muted-foreground">
+                          Tiket ini ditugaskan ke <strong className="text-foreground">{ticket.assigned_user?.name || "teknisi lain"}</strong>. Anda dapat melihat percakapan dan catatan teknis, namun hanya teknisi penanggung jawab atau Admin IT yang dapat memproses tahapan tiket ini.
+                        </div>
                       )}
                     </div>
-                  </div>
+
+                    {/* Tugaskan Teknisi — Dibatasi Berdasarkan Anggota Tim */}
+                    {isDispatcher && (
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                          <UserCheck className="h-3.5 w-3.5 text-primary" />
+                          Tugaskan ke Teknisi IT Support
+                        </label>
+                        {teamMembers.length > 0 ? (
+                          <div className="flex gap-2">
+                            <Select
+                              value={ticket.assigned_user?.id ? String(ticket.assigned_user.id) : undefined}
+                              onValueChange={(val) => assignUserMutation.mutate(parseInt(val))}
+                              disabled={assignUserMutation.isPending}
+                            >
+                              <SelectTrigger className="flex-1 h-9 text-xs">
+                                <SelectValue placeholder="Pilih teknisi dari tim..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {teamMembers.map((m: any) => (
+                                  <SelectItem key={m.id} value={String(m.id)}>
+                                    {m.name} ({m.nik})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => assignToMeMutation.mutate()}
+                              disabled={assignToMeMutation.isPending}
+                              className="text-xs h-9 shrink-0"
+                            >
+                              Ke Saya
+                            </Button>
+                          </div>
+                        ) : ticket.team_id ? (
+                          <div className="p-2.5 rounded-lg border border-amber-200 bg-amber-50 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-900/40">
+                            <p className="font-medium">Belum ada teknisi terdaftar di tim ini.</p>
+                            <p className="text-[11px] mt-0.5 opacity-80">
+                              Hubungi Super Admin untuk menambahkan anggota tim di Master Data.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <Select
+                              value={ticket.assigned_user?.id ? String(ticket.assigned_user.id) : undefined}
+                              onValueChange={(val) => assignUserMutation.mutate(parseInt(val))}
+                              disabled={assignUserMutation.isPending}
+                            >
+                              <SelectTrigger className="flex-1 h-9 text-xs">
+                                <SelectValue placeholder="Pilih teknisi IT..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {techData?.map((t: any) => (
+                                  <SelectItem key={t.id} value={String(t.id)}>
+                                    {t.name} ({t.nik})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => assignToMeMutation.mutate()}
+                              disabled={assignToMeMutation.isPending}
+                              className="text-xs h-9 shrink-0"
+                            >
+                              Ke Saya
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Tandai Selesai */}
+                    {canManageTicket && (
+                      <div className="pt-2 border-t flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <div>
+                          <p className="text-xs font-medium text-foreground">
+                            Pekerjaan Perbaikan Selesai?
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            Tutup langsung tiket setelah perbaikan kendala tuntas.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {closingStage && ticket.stage?.id !== closingStage.id && (
+                            <Button
+                              size="sm"
+                              onClick={() => updateStageMutation.mutate(closingStage.id)}
+                              disabled={updateStageMutation.isPending}
+                              className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                            >
+                              <CheckCircle className="h-3.5 w-3.5" />
+                              Tandai Selesai (Closed)
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -1075,7 +1278,13 @@ export default function TicketDetailPage({
                     <p className="text-xs font-semibold">Tiket Selesai</p>
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    Jika ada kendala baru, silakan gunakan tombol <strong>Buat Tiket Baru Terkait</strong>.
+                    {isCreator ? (
+                      <>
+                        Jika ada kendala baru, silakan gunakan tombol <strong>Buat Tiket Baru Terkait</strong>.
+                      </>
+                    ) : (
+                      "Tiket ini telah ditandai selesai."
+                    )}
                   </p>
                 </div>
               )}
@@ -1084,16 +1293,23 @@ export default function TicketDetailPage({
         </div>
       </div>
 
-      {/* Follow-up Ticket Dialog */}
-      {followUpOpen && (
-        <CreateTicketDialog
-          open={followUpOpen}
-          onOpenChange={setFollowUpOpen}
-          initialSubject={`[Follow-up HD-${ticket.ticket_number || ticket.id}] ${ticket.subject}`}
-          initialDescription={`Melanjutkan kendala dari tiket sebelumnya #${ticket.ticket_number || ticket.id}:\n\n`}
-          trigger={null}
-        />
-      )}
+      {/* Follow-up Ticket Dialog (Hanya untuk pembuat tiket) */}
+      {followUpOpen && isCreator && (() => {
+        const ticketNum = ticket.ticket_number || String(ticket.id)
+        const cleanTicketNum = ticketNum.startsWith("HD-") ? ticketNum : `HD-${ticketNum}`
+        const cleanSubject = ticket.subject.replace(/^\[Follow-up [^\]]+\]\s*/, "")
+
+        return (
+          <CreateTicketDialog
+            open={followUpOpen}
+            onOpenChange={setFollowUpOpen}
+            initialSubject={`[Follow-up ${cleanTicketNum}] ${cleanSubject}`}
+            initialDescription={`Melanjutkan kendala dari tiket sebelumnya #${ticket.ticket_number || ticket.id}:\n\n`}
+            parentTicketId={ticket.id}
+            trigger={null}
+          />
+        )
+      })()}
     </div>
   )
 }

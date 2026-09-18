@@ -29,10 +29,16 @@ export async function GET(
       include: {
         category: true,
         stage: true,
-        team: true,
+        team: {
+          include: {
+            members: true,
+          },
+        },
         createdBy: { select: { id: true, name: true, nik: true, email: true, phone: true } },
         assignedTo: { select: { id: true, name: true } },
         attachments: { where: { messageId: null } },
+        parent: { select: { id: true, ticketNumber: true, subject: true } },
+        children: { select: { id: true, ticketNumber: true, subject: true }, orderBy: { id: "asc" } },
       },
     })
 
@@ -66,7 +72,21 @@ export async function GET(
         satisfaction_rating: ticket.satisfactionRating,
         feedback: ticket.feedback,
         stage: ticket.stage ? { id: ticket.stage.id, name: ticket.stage.name } : null,
-        team: ticket.team ? { id: ticket.team.id, name: ticket.team.name } : null,
+        team: ticket.team ? {
+          id: ticket.team.id,
+          name: ticket.team.name,
+          members: await (async () => {
+            if (!ticket.team) return []
+            const memberIds = ticket.team.members.map((m: any) => m.employeeId)
+            if (memberIds.length === 0) return []
+            const employees = await prisma.employee.findMany({
+              where: { id: { in: memberIds } },
+              select: { id: true, name: true, nik: true, email: true, jobTitle: true },
+              orderBy: { name: "asc" },
+            })
+            return employees
+          })(),
+        } : null,
         category: ticket.category ? { id: ticket.category.id, name: ticket.category.name } : null,
         stage_id: ticket.stageId,
         stage_name: ticket.stage?.name || null,
@@ -74,6 +94,19 @@ export async function GET(
         team_name: ticket.team?.name || null,
         category_id: ticket.categoryId,
         category_name: ticket.category?.name || null,
+        parent_id: ticket.parentId,
+        parent_ticket: ticket.parent
+          ? {
+              id: ticket.parent.id,
+              ticket_number: ticket.parent.ticketNumber,
+              subject: ticket.parent.subject,
+            }
+          : null,
+        related_tickets: ticket.children.map((c) => ({
+          id: c.id,
+          ticket_number: c.ticketNumber,
+          subject: c.subject,
+        })),
         created_by: ticket.createdBy
           ? { id: ticket.createdBy.id, name: ticket.createdBy.name }
           : null,

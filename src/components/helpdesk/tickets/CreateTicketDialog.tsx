@@ -49,6 +49,7 @@ interface CreateTicketDialogProps {
     onSuccess?: () => void
     initialSubject?: string
     initialDescription?: string
+    parentTicketId?: number
     open?: boolean
     onOpenChange?: (open: boolean) => void
 }
@@ -93,6 +94,7 @@ export function CreateTicketDialog({
     onSuccess,
     initialSubject,
     initialDescription,
+    parentTicketId,
     open: controlledOpen,
     onOpenChange: setControlledOpen,
 }: CreateTicketDialogProps) {
@@ -169,6 +171,7 @@ export function CreateTicketDialog({
                 priority: data.priority || "1",
             }
             if (data.category_id) payload.category_id = parseInt(data.category_id)
+            if (parentTicketId) payload.parent_id = parentTicketId
             if (isStaff && data.team_id) payload.team_id = parseInt(data.team_id)
             if (isStaff && data.ticket_type_id) payload.ticket_type_id = parseInt(data.ticket_type_id)
 

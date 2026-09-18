@@ -130,12 +130,15 @@ model Ticket {
   teamId       Int?
   createdById  Int
   assignedToId Int?
+  parentId     Int?
 
   category   Category?  @relation(fields: [categoryId], references: [id])
   stage      Stage?     @relation(fields: [stageId], references: [id])
   team       Team?      @relation(fields: [teamId], references: [id])
   createdBy  Employee   @relation("CreatedTickets", fields: [createdById], references: [id])
   assignedTo Employee?  @relation("AssignedTickets", fields: [assignedToId], references: [id])
+  parent     Ticket?    @relation("RelatedTickets", fields: [parentId], references: [id])
+  children   Ticket[]   @relation("RelatedTickets")
 
   messages    TicketMessage[]
   attachments Attachment[]

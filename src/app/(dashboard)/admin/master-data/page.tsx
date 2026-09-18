@@ -78,6 +78,7 @@ export default function MasterDataPage() {
     hasRole("SUPER_ADMIN") ||
     hasRole("ADMIN_IT_SUPPORT") ||
     hasPermission("master:manage")
+  const isSuperAdmin = hasRole("SUPER_ADMIN")
   const [isHydrated, setIsHydrated] = useState(false)
 
   useEffect(() => {
@@ -440,7 +441,7 @@ export default function MasterDataPage() {
                 Tambah Kategori
               </Button>
             )}
-            {activeTab === "teams" && (
+            {activeTab === "teams" && isSuperAdmin && (
               <Button onClick={openCreateTeam} className="gap-2">
                 <Plus className="h-4 w-4" />
                 Tambah Tim
@@ -628,8 +629,8 @@ export default function MasterDataPage() {
                               </span>
                             )}
                           </td>
-                          <td className="px-6 py-4 text-right">
-                            {canManage && (
+                          <td className="px-6 py-4 text-right whitespace-nowrap">
+                            {isSuperAdmin && (
                               <div className="flex items-center justify-end gap-1.5">
                                 <Button
                                   variant="outline"

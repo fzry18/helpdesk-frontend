@@ -234,6 +234,8 @@ export async function POST(request: NextRequest) {
       priority,
       category_id,
       team_id,
+      parent_id,
+      parentId,
       attachments = [],
     } = body
 
@@ -243,6 +245,8 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    const resolvedParentId = parent_id || parentId ? parseInt(parent_id || parentId) : null
 
     // Generate ticket number: HD-YYYYMMDD-XXXX
     const today = new Date()
@@ -281,11 +285,13 @@ export async function POST(request: NextRequest) {
         teamId: team_id ? parseInt(team_id) : null,
         stageId: startingStage?.id || null,
         createdById: payload.employeeId,
+        parentId: resolvedParentId,
       },
       include: {
         category: true,
         stage: true,
         team: true,
+        parent: { select: { id: true, ticketNumber: true, subject: true } },
         createdBy: { select: { id: true, name: true } },
       },
     })

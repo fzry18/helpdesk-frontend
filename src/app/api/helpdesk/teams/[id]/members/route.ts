@@ -75,12 +75,10 @@ export async function POST(
   const payload = verifyRequest(request.headers.get("authorization"))
   if (
     !payload ||
-    (!payload.roles.includes("SUPER_ADMIN") &&
-      !payload.roles.includes("ADMIN_IT_SUPPORT") &&
-      !payload.permissions.includes("master:manage"))
+    (!payload.isSuperAdmin && !payload.roles.includes("SUPER_ADMIN"))
   ) {
     return NextResponse.json(
-      { success: false, message: "Hanya Admin yang dapat mengelola anggota tim." },
+      { success: false, message: "Hanya Super Admin yang dapat mengelola anggota tim." },
       { status: 403 }
     )
   }
@@ -103,11 +101,25 @@ export async function POST(
     }
 
     // Cek apakah karyawan ada
-    const emp = await prisma.employee.findUnique({ where: { id: employee_id } })
+    const emp = await prisma.employee.findUnique({
+      where: { id: employee_id },
+      include: { userRoles: { include: { role: true } } },
+    })
     if (!emp) {
       return NextResponse.json(
         { success: false, message: "Karyawan tidak ditemukan di database helpdesk." },
         { status: 404 }
+      )
+    }
+
+    // Validasi bahwa karyawan memiliki role IT (SUPER_ADMIN, ADMIN_IT_SUPPORT, atau IT_SUPPORT)
+    const itRoles = ["SUPER_ADMIN", "ADMIN_IT_SUPPORT", "IT_SUPPORT"]
+    const empRoles = emp.userRoles.map((ur) => ur.role.slug)
+    const hasItRole = empRoles.some((r) => itRoles.includes(r))
+    if (!hasItRole) {
+      return NextResponse.json(
+        { success: false, message: `${emp.name} tidak memiliki role IT. Hanya staf dengan role SUPER_ADMIN, ADMIN_IT_SUPPORT, atau IT_SUPPORT yang dapat ditambahkan ke tim.` },
+        { status: 400 }
       )
     }
 
@@ -147,12 +159,10 @@ export async function DELETE(
   const payload = verifyRequest(request.headers.get("authorization"))
   if (
     !payload ||
-    (!payload.roles.includes("SUPER_ADMIN") &&
-      !payload.roles.includes("ADMIN_IT_SUPPORT") &&
-      !payload.permissions.includes("master:manage"))
+    (!payload.isSuperAdmin && !payload.roles.includes("SUPER_ADMIN"))
   ) {
     return NextResponse.json(
-      { success: false, message: "Hanya Admin yang dapat mengelola anggota tim." },
+      { success: false, message: "Hanya Super Admin yang dapat mengelola anggota tim." },
       { status: 403 }
     )
   }

@@ -5,13 +5,10 @@ import { prisma } from "@/lib/prisma"
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
-function checkPermission(payload: any) {
+function checkSuperAdminOnly(payload: any) {
   return (
     payload &&
-    (payload.isSuperAdmin ||
-      payload.roles?.includes("SUPER_ADMIN") ||
-      payload.roles?.includes("ADMIN_IT_SUPPORT") ||
-      payload.permissions?.includes("master:manage"))
+    (payload.isSuperAdmin || payload.roles?.includes("SUPER_ADMIN"))
   )
 }
 
@@ -50,8 +47,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const payload = verifyRequest(request.headers.get("authorization"))
-  if (!checkPermission(payload)) {
-    return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 })
+  if (!checkSuperAdminOnly(payload)) {
+    return NextResponse.json({ success: false, message: "Hanya Super Admin yang dapat mengelola tim." }, { status: 403 })
   }
   try {
     const body = await request.json()
@@ -77,8 +74,8 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   const payload = verifyRequest(request.headers.get("authorization"))
-  if (!checkPermission(payload)) {
-    return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 })
+  if (!checkSuperAdminOnly(payload)) {
+    return NextResponse.json({ success: false, message: "Hanya Super Admin yang dapat mengelola tim." }, { status: 403 })
   }
   try {
     const body = await request.json()
@@ -112,8 +109,8 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   const payload = verifyRequest(request.headers.get("authorization"))
-  if (!checkPermission(payload)) {
-    return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 })
+  if (!checkSuperAdminOnly(payload)) {
+    return NextResponse.json({ success: false, message: "Hanya Super Admin yang dapat mengelola tim." }, { status: 403 })
   }
   const url = new URL(request.url)
   const idParam = url.searchParams.get("id")
