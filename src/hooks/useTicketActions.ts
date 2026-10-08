@@ -13,13 +13,13 @@ export const useUpdateTicket = () => {
             queryClient.invalidateQueries({ queryKey: ['tickets'] })
             queryClient.invalidateQueries({ queryKey: ['ticket', variables.id] })
             toast({
-                title: '✅ Berhasil',
+                title: 'Berhasil',
                 description: 'Tiket berhasil diperbarui',
             })
         },
         onError: (error: any) => {
             toast({
-                title: '❌ Gagal',
+                title: 'Gagal',
                 description: error.response?.data?.message || 'Gagal memperbarui tiket',
                 variant: 'destructive',
             })
@@ -37,13 +37,13 @@ export const useDeleteTicket = () => {
             queryClient.invalidateQueries({ queryKey: ['tickets'] })
             queryClient.invalidateQueries({ queryKey: ['dashboard'] })
             toast({
-                title: '✅ Berhasil',
+                title: 'Berhasil',
                 description: 'Tiket berhasil dihapus',
             })
         },
         onError: (error: any) => {
             toast({
-                title: '❌ Gagal',
+                title: 'Gagal',
                 description: error.response?.data?.message || 'Gagal menghapus tiket',
                 variant: 'destructive',
             })
@@ -62,13 +62,13 @@ export const useAssignUser = () => {
             queryClient.invalidateQueries({ queryKey: ['tickets'] })
             queryClient.invalidateQueries({ queryKey: ['ticket', variables.ticketId] })
             toast({
-                title: '✅ Berhasil',
+                title: 'Berhasil',
                 description: 'User berhasil di-assign ke tiket',
             })
         },
         onError: (error: any) => {
             toast({
-                title: '❌ Gagal',
+                title: 'Gagal',
                 description: error.response?.data?.message || 'Gagal assign user',
                 variant: 'destructive',
             })
@@ -88,13 +88,13 @@ export const useUpdateStage = () => {
             queryClient.invalidateQueries({ queryKey: ['ticket', variables.ticketId] })
             queryClient.invalidateQueries({ queryKey: ['dashboard'] })
             toast({
-                title: '✅ Berhasil',
+                title: 'Berhasil',
                 description: 'Status tiket berhasil diperbarui',
             })
         },
         onError: (error: any) => {
             toast({
-                title: '❌ Gagal',
+                title: 'Gagal',
                 description: error.response?.data?.message || 'Gagal memperbarui status',
                 variant: 'destructive',
             })
@@ -113,13 +113,13 @@ export const useUpdatePriority = () => {
             queryClient.invalidateQueries({ queryKey: ['tickets'] })
             queryClient.invalidateQueries({ queryKey: ['ticket', variables.ticketId] })
             toast({
-                title: '✅ Berhasil',
+                title: 'Berhasil',
                 description: 'Prioritas tiket berhasil diperbarui',
             })
         },
         onError: (error: any) => {
             toast({
-                title: '❌ Gagal',
+                title: 'Gagal',
                 description: error.response?.data?.message || 'Gagal memperbarui prioritas',
                 variant: 'destructive',
             })
@@ -149,13 +149,13 @@ export const usePostMessage = () => {
             })
             queryClient.invalidateQueries({ queryKey: ['ticket', variables.ticketId] })
             toast({
-                title: '✅ Berhasil',
+                title: 'Berhasil',
                 description: 'Balasan berhasil dikirim',
             })
         },
         onError: (error: any) => {
             toast({
-                title: '❌ Gagal',
+                title: 'Gagal',
                 description: error.response?.data?.message || 'Gagal mengirim balasan',
                 variant: 'destructive',
             })

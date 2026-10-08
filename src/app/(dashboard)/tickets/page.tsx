@@ -24,6 +24,7 @@ export default function TicketsPage() {
 
   const [activeQueue, setActiveQueue] = useState<string>(isStaff ? "unassigned" : "active")
   const [showWorkload, setShowWorkload] = useState<boolean>(false)
+  const [page, setPage] = useState<number>(1)
 
   const [filters, setFilters] = useState<{
     search?: string
@@ -35,14 +36,16 @@ export default function TicketsPage() {
 
   const debouncedSearch = useDebounce(filters.search || "", 500)
 
-  // Fetch tickets with activeQueue filter
+  // Fetch tickets with activeQueue filter and pagination
   const { data, isLoading, error } = useQuery({
-    queryKey: ["tickets", { ...filters, queue: activeQueue, search: debouncedSearch }],
+    queryKey: ["tickets", { ...filters, queue: activeQueue, search: debouncedSearch, page }],
     queryFn: async () => {
       const response = await ticketAPI.list({
         ...filters,
         queue: activeQueue,
         search: debouncedSearch || undefined,
+        page,
+        limit: 20,
       } as any)
       return response
     },
@@ -204,7 +207,10 @@ export default function TicketsPage() {
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveQueue(tab.id)}
+              onClick={() => {
+                setActiveQueue(tab.id)
+                setPage(1)
+              }}
               className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-medium transition-all ${
                 isActive
                   ? "bg-primary text-primary-foreground shadow-sm"
@@ -228,7 +234,12 @@ export default function TicketsPage() {
       </div>
 
       {/* Filters (Search, Priority, Stage, Category) */}
-      <TicketFilters onFilterChange={setFilters} />
+      <TicketFilters
+        onFilterChange={(newFilters) => {
+          setFilters(newFilters)
+          setPage(1)
+        }}
+      />
 
       {/* Error state */}
       {error && (
@@ -248,14 +259,57 @@ export default function TicketsPage() {
         isLoading={isLoading}
       />
 
-      {/* Pagination */}
-      {data?.meta && (
-        <div className="flex items-center justify-between text-xs text-muted-foreground pt-2">
-          <p>
-            Menampilkan halaman {data.meta.page} dari {data.meta.total_pages} ({data.meta.total} tiket)
-          </p>
-        </div>
-      )}
+      {/* Pagination Controls */}
+      {data?.meta && (() => {
+        const meta = data.meta
+        const totalPages = meta.total_pages || 1
+        return (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t text-xs text-muted-foreground">
+            <p>
+              Menampilkan halaman {meta.page} dari {totalPages} ({meta.total} tiket)
+            </p>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1 || isLoading}
+                  className="h-8 text-xs min-h-[36px]"
+                >
+                  Sebelumnya
+                </Button>
+                <div className="flex items-center gap-1 px-1">
+                  {Array.from({ length: Math.min(5, totalPages) }).map((_, i) => {
+                    const pageNum = i + 1
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={page === pageNum ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setPage(pageNum)}
+                        disabled={isLoading}
+                        className="h-8 w-8 p-0 text-xs min-h-[36px] min-w-[36px]"
+                      >
+                        {pageNum}
+                      </Button>
+                    )
+                  })}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages || isLoading}
+                  className="h-8 text-xs min-h-[36px]"
+                >
+                  Selanjutnya
+                </Button>
+              </div>
+            )}
+          </div>
+        )
+      })()}
     </div>
   )
 }

@@ -16,34 +16,29 @@ interface StatCardProps {
 
 const colorConfig = {
   blue: {
-    text: "text-blue-600",
-    bg: "bg-blue-100",
-    gradient: "from-blue-50 to-blue-100/50",
-    trend: "text-blue-600",
+    text: "text-blue-700 dark:text-blue-300",
+    bg: "bg-blue-50 dark:bg-blue-950/50",
+    border: "border-blue-200/60 dark:border-blue-900/40",
   },
   orange: {
-    text: "text-orange-600",
-    bg: "bg-orange-100",
-    gradient: "from-orange-50 to-orange-100/50",
-    trend: "text-orange-600",
+    text: "text-orange-700 dark:text-orange-300",
+    bg: "bg-orange-50 dark:bg-orange-950/50",
+    border: "border-orange-200/60 dark:border-orange-900/40",
   },
   green: {
-    text: "text-green-600",
-    bg: "bg-green-100",
-    gradient: "from-green-50 to-green-100/50",
-    trend: "text-green-600",
+    text: "text-emerald-700 dark:text-emerald-300",
+    bg: "bg-emerald-50 dark:bg-emerald-950/50",
+    border: "border-emerald-200/60 dark:border-emerald-900/40",
   },
   purple: {
-    text: "text-purple-600",
-    bg: "bg-purple-100",
-    gradient: "from-purple-50 to-purple-100/50",
-    trend: "text-purple-600",
+    text: "text-purple-700 dark:text-purple-300",
+    bg: "bg-purple-50 dark:bg-purple-950/50",
+    border: "border-purple-200/60 dark:border-purple-900/40",
   },
   red: {
-    text: "text-red-600",
-    bg: "bg-red-100",
-    gradient: "from-red-50 to-red-100/50",
-    trend: "text-red-600",
+    text: "text-rose-700 dark:text-rose-300",
+    bg: "bg-rose-50 dark:bg-rose-950/50",
+    border: "border-rose-200/60 dark:border-rose-900/40",
   },
 }
 
@@ -55,36 +50,33 @@ export function StatCard({
   trend,
   subtitle,
 }: StatCardProps) {
-  const colors = colorConfig[color]
+  const colors = colorConfig[color] || colorConfig.blue
 
   return (
-    <Card
-      className={cn(
-        "relative overflow-hidden transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5",
-        `bg-gradient-to-br ${colors.gradient}`
-      )}
-    >
+    <Card className="transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 border-border/70 bg-card">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">
+        <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           {title}
         </CardTitle>
-        <div className={cn("rounded-full p-2", colors.bg)}>
+        <div className={cn("rounded-lg p-2.5 border", colors.bg, colors.border)}>
           <Icon className={cn("h-4 w-4", colors.text)} />
         </div>
       </CardHeader>
       <CardContent>
-        <div className="text-3xl font-bold">{value}</div>
+        <div className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">{value}</div>
         {trend && (
-          <div className="flex items-center gap-1 mt-1">
+          <div className="flex items-center gap-1 mt-1.5 text-xs">
             <span
               className={cn(
-                "text-sm font-medium",
-                trend.isPositive ? "text-green-600" : "text-red-600"
+                "font-semibold",
+                trend.isPositive
+                  ? "text-emerald-700 dark:text-emerald-400"
+                  : "text-rose-700 dark:text-rose-400"
               )}
             >
-              {trend.isPositive ? "↗" : "↘"} {Math.abs(trend.value)}%
+              {trend.isPositive ? "+" : "-"}{Math.abs(trend.value)}%
             </span>
-            <span className="text-xs text-muted-foreground">vs last week</span>
+            <span className="text-muted-foreground">dibanding periode sebelumnya</span>
           </div>
         )}
         {subtitle && (
@@ -94,3 +86,4 @@ export function StatCard({
     </Card>
   )
 }
+

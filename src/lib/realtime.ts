@@ -14,9 +14,7 @@ interface RealtimeBus {
   subscribe(channel: string, handler: MessageHandler): () => void
 }
 
-// ============================================
 // In-Memory Fallback (EventEmitter)
-// ============================================
 
 class InMemoryBus implements RealtimeBus {
   private emitter = new EventEmitter()
@@ -37,9 +35,7 @@ class InMemoryBus implements RealtimeBus {
   }
 }
 
-// ============================================
 // Redis Pub/Sub
-// ============================================
 
 class RedisBus implements RealtimeBus {
   private pub: Redis
@@ -102,9 +98,7 @@ class RedisBus implements RealtimeBus {
   }
 }
 
-// ============================================
 // Singleton Bus Factory
-// ============================================
 
 let _bus: RealtimeBus | null = null
 

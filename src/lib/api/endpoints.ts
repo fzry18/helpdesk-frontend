@@ -47,9 +47,7 @@ export interface CreateTicketPayload {
   captured_browser?: string
 }
 
-// ============================================
-// 🔐 AUTH API
-// ============================================
+// Auth API
 export const authAPI = {
   login: (data: LoginRequest) =>
     apiClient.post<LoginResponse>("/auth/login", data),
@@ -65,9 +63,7 @@ export const authAPI = {
     }),
 }
 
-// ============================================
-// 🎫 TICKET API
-// ============================================
+// Ticket API
 export const ticketAPI = {
   list: (params?: {
     page?: number
@@ -149,9 +145,7 @@ export const ticketAPI = {
     >("/tickets/search", body),
 }
 
-// ============================================
-// 💬 MESSAGE API
-// ============================================
+// Message API
 export const messageAPI = {
   getMessages: (
     ticketId: number,
@@ -188,9 +182,7 @@ export const messageAPI = {
     apiClient.post(`/tickets/${ticketId}/messages/mark-read`),
 }
 
-// ============================================
-// 📎 ATTACHMENT API
-// ============================================
+// Attachment API
 interface Attachment {
   id: number
   name: string
@@ -237,9 +229,7 @@ export const attachmentAPI = {
     apiClient.post("/attachments/bulk-delete", { ids }),
 }
 
-// ============================================
-// 📊 MASTER DATA API
-// ============================================
+// Master Data API
 interface Priority {
   value: string
   label: string
@@ -283,9 +273,7 @@ export const masterDataAPI = {
     }),
 }
 
-// ============================================
-// 📈 DASHBOARD API
-// ============================================
+// Dashboard API
 interface DashboardStats {
   summary: {
     total: number
@@ -357,8 +345,8 @@ interface TeamPerformance {
 }
 
 export const dashboardAPI = {
-  getStats: (params?: { team_id?: number; date_from?: string; date_to?: string }) =>
-    apiClient.get<ApiResponse<DashboardStats>>("/dashboard", { params }),
+  getStats: (params?: { team_id?: number; date_from?: string; date_to?: string; days?: number }) =>
+    apiClient.get<ApiResponse<any>>("/dashboard", { params }),
 
   getByTeam: () =>
     apiClient.get<ApiResponse<TeamStats[]>>("/dashboard/by-team"),

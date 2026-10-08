@@ -7,9 +7,7 @@ const JWT_EXPIRATION = process.env.JWT_EXPIRATION || "24h"
 const ODOO_BASE_URL = process.env.ODOO_BASE_URL || "https://erp1.gpedata.id"
 const ODOO_API_KEY = process.env.ODOO_API_KEY || ""
 
-// ============================================
 // JWT Helpers
-// ============================================
 
 export interface JwtPayload {
   employeeId: number
@@ -57,9 +55,7 @@ export function verifyJwt(token: string): JwtPayload {
   return jwt.verify(token, JWT_SECRET) as JwtPayload
 }
 
-// ============================================
 // Odoo Live Auth
-// ============================================
 
 export interface OdooLoginResult {
   success: boolean
@@ -297,9 +293,7 @@ export async function syncOdooAppAccess(
   }
 }
 
-// ============================================
 // Local RBAC Helpers
-// ============================================
 
 /**
  * Get local RBAC roles & permissions for an employee.

@@ -27,7 +27,19 @@ import {
 } from "@/components/ui/select"
 import { toast } from "@/hooks/use-toast"
 import { useAuthStore } from "@/store/authStore"
-import { Plus, Loader2, AlertCircle, Upload, X, FileIcon, Sparkles } from "lucide-react"
+import {
+    Plus,
+    Loader2,
+    AlertCircle,
+    Upload,
+    X,
+    FileIcon,
+    Printer,
+    Globe,
+    Laptop,
+    KeyRound,
+    BookmarkCheck,
+} from "lucide-react"
 
 const createTicketSchema = z.object({
     subject: z.string().min(5, "Subject minimal 5 karakter").max(200, "Subject maksimal 200 karakter"),
@@ -58,7 +70,7 @@ const PRESETS = [
     {
         id: "hardware",
         label: "Printer / PC",
-        icon: "🖨️",
+        icon: Printer,
         keyword: "Hardware",
         defaultSubject: "Kendala Printer / Komputer Fisik",
         placeholder: "Sebutkan nama perangkat, nomor aset, atau kendala fisik printer/komputer...",
@@ -66,7 +78,7 @@ const PRESETS = [
     {
         id: "network",
         label: "Jaringan & WiFi",
-        icon: "🌐",
+        icon: Globe,
         keyword: "Jaringan",
         defaultSubject: "Gangguan Koneksi Jaringan / WiFi",
         placeholder: "Jelaskan lokasi ruangan, nama SSID WiFi, dan detail kendala koneksi...",
@@ -74,7 +86,7 @@ const PRESETS = [
     {
         id: "system",
         label: "Sistem / Odoo ERP",
-        icon: "💻",
+        icon: Laptop,
         keyword: "Software",
         defaultSubject: "Error Aplikasi / Odoo ERP",
         placeholder: "Sebutkan menu/modul yang bermasalah, nomor dokumen, dan pesan error...",
@@ -82,7 +94,7 @@ const PRESETS = [
     {
         id: "account",
         label: "Akun & Password",
-        icon: "🔑",
+        icon: KeyRound,
         keyword: "Akun",
         defaultSubject: "Permintaan Reset Password / Hak Akses",
         placeholder: "Sebutkan akun, NIK, sistem yang dituju, dan jenis akses yang dibutuhkan...",
@@ -196,8 +208,8 @@ export function CreateTicketDialog({
         },
         onSuccess: (response) => {
             toast({
-                title: "✅ Tiket Berhasil Dibuat!",
-                description: `Tiket #${response.data.ticket_number || response.data.id} telah tercatat.`,
+                title: "Tiket Berhasil Dibuat",
+                description: `Tiket #${response.data.ticket_number || response.data.id} telah tercatat dalam sistem.`,
             })
             queryClient.invalidateQueries({ queryKey: ["tickets"] })
             queryClient.invalidateQueries({ queryKey: ["dashboard"] })
@@ -209,7 +221,7 @@ export function CreateTicketDialog({
         },
         onError: (error: any) => {
             toast({
-                title: "❌ Gagal Membuat Tiket",
+                title: "Gagal Membuat Tiket",
                 description: error.response?.data?.message || error.message || "Terjadi kesalahan",
                 variant: "destructive",
             })
@@ -264,27 +276,27 @@ export function CreateTicketDialog({
                 </DialogHeader>
 
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-                    {/* Quick Issue Presets */}
                     <div className="space-y-2">
                         <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                            <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-                            Pintasan Jenis Masalah Cepat
+                            <BookmarkCheck className="h-3.5 w-3.5 text-primary" />
+                            Pintasan Jenis Masalah
                         </Label>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                             {PRESETS.map((p) => {
                                 const isSelected = selectedPreset === p.id
+                                const PresetIcon = p.icon
                                 return (
                                     <button
                                         type="button"
                                         key={p.id}
                                         onClick={() => handleSelectPreset(p)}
-                                        className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all ${
+                                        className={`group flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                                             isSelected
-                                                ? "border-primary bg-primary/10 text-primary shadow-sm ring-1 ring-primary"
-                                                : "border-border/60 hover:border-primary/40 hover:bg-muted/30"
+                                                ? "border-primary bg-primary/10 text-primary shadow-xs ring-1 ring-primary font-semibold"
+                                                : "border-border/60 hover:border-primary/40 hover:bg-muted/30 text-foreground"
                                         }`}
                                     >
-                                        <span className="text-xl mb-1">{p.icon}</span>
+                                        <PresetIcon className={`h-5 w-5 mb-1.5 transition-colors ${isSelected ? "text-primary" : "text-muted-foreground group-hover:text-foreground"}`} />
                                         <span className="text-xs font-medium leading-tight">{p.label}</span>
                                     </button>
                                 )
@@ -326,10 +338,10 @@ export function CreateTicketDialog({
                                         <SelectValue placeholder="Prioritas" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="1">🟢 Rendah (Low)</SelectItem>
-                                        <SelectItem value="2">🟡 Sedang (Normal)</SelectItem>
-                                        <SelectItem value="3">🟠 Tinggi (High - Menghambat)</SelectItem>
-                                        <SelectItem value="4">🔴 Mendesak (Critical - Urgent)</SelectItem>
+                                        <SelectItem value="1">Rendah (Low)</SelectItem>
+                                        <SelectItem value="2">Sedang (Normal)</SelectItem>
+                                        <SelectItem value="3">Tinggi (High - Menghambat)</SelectItem>
+                                        <SelectItem value="4">Mendesak (Critical - Urgent)</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>

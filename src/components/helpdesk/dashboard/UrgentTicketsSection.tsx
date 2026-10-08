@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { AlertCircle, Clock, ExternalLink } from "lucide-react"
+import { AlertCircle, Clock, ExternalLink, CheckCircle2 } from "lucide-react"
 import Link from "next/link"
 import type { Ticket } from "@/types"
 import { formatRelativeTime } from "@/lib/utils"
@@ -38,20 +38,23 @@ export function UrgentTicketsSection({
 
     if (tickets.length === 0) {
         return (
-            <Card>
+            <Card className="border-border/70 bg-card">
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <AlertCircle className="h-5 w-5 text-red-500" />
+                    <CardTitle className="flex items-center gap-2 text-base font-semibold">
+                        <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
                         Tiket Mendesak
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
                     <div className="flex flex-col items-center justify-center py-8 text-center">
-                        <div className="rounded-full bg-green-100 p-3 mb-3">
-                            <AlertCircle className="h-6 w-6 text-green-600" />
+                        <div className="rounded-full bg-emerald-50 dark:bg-emerald-950/40 p-3 mb-3 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-900/40">
+                            <CheckCircle2 className="h-6 w-6" />
                         </div>
-                        <p className="text-sm text-muted-foreground">
-                            Tidak ada tiket mendesak saat ini
+                        <p className="text-sm font-medium text-foreground">
+                            Tidak Ada Tiket Mendesak
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                            Semua tiket berprioritas tinggi dan mendesak telah tertangani.
                         </p>
                     </div>
                 </CardContent>
@@ -91,7 +94,7 @@ export function UrgentTicketsSection({
                                     variant="outline"
                                     className="bg-red-100 text-red-800 border-red-200 text-xs whitespace-nowrap"
                                 >
-                                    {ticket.priority_label}
+                                    {ticket.priority === "4" ? "Mendesak" : "Tinggi"}
                                 </Badge>
                             </div>
                             <p className="text-xs text-muted-foreground">
@@ -107,7 +110,7 @@ export function UrgentTicketsSection({
                             </div>
                         </div>
                         <Link href={`/tickets/${ticket.id}`}>
-                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
+                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0" aria-label={`Buka detail tiket ${ticket.ticket_number || ticket.id}`}>
                                 <ExternalLink className="h-4 w-4" />
                             </Button>
                         </Link>

@@ -42,6 +42,7 @@ import {
   AlertTriangle,
   Eye,
   ZoomIn,
+  Lock,
 } from "lucide-react"
 import Link from "next/link"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -699,13 +700,13 @@ export default function TicketDetailPage({
               </CardHeader>
               <CardContent className="space-y-4">
 
-                {/* KONDISI 1: Tiket Baru — Belum Ada Tim (Dispatch) */}
+                {/* KONDISI 1: Tiket Baru: Belum Ada Tim (Dispatch) */}
                 {isNewTicket && isDispatcher && (
                   <div className="space-y-3 p-3 rounded-lg border-2 border-dashed border-primary/30 bg-primary/[0.03]">
                     <div className="space-y-1">
                       <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                         <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                        Tiket Baru — Pilih Tim Penanganan
+                        Tiket Baru: Pilih Tim Penanganan
                       </p>
                       <p className="text-[11px] text-muted-foreground">
                         Tiket ini belum dialokasikan ke tim manapun. Pilih tim penanganan lalu klik &quot;Proses / Terima Tiket&quot; untuk memulai penanganan.
@@ -736,7 +737,7 @@ export default function TicketDetailPage({
                   </div>
                 )}
 
-                {/* KONDISI 2: Tiket Sudah Memiliki Tim — In Progress */}
+                {/* KONDISI 2: Tiket Sudah Memiliki Tim: In Progress */}
                 {!isNewTicket && (
                   <>
                     {/* Info Tim Saat Ini + Opsi Ganti Tim (Dispatcher Only) */}
@@ -795,7 +796,7 @@ export default function TicketDetailPage({
                       )}
                     </div>
 
-                    {/* Tugaskan Teknisi — Dibatasi Berdasarkan Anggota Tim */}
+                    {/* Tugaskan Teknisi: Dibatasi Berdasarkan Anggota Tim */}
                     {isDispatcher && (
                       <div className="space-y-1.5">
                         <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
@@ -1013,7 +1014,7 @@ export default function TicketDetailPage({
             </CardContent>
           </Card>
 
-          {/* Obrolan / Chat Thread — Modern Chat Bubble UI */}
+          {/* Obrolan / Chat Thread: Chat Bubble UI */}
           <Card className="flex flex-col h-[560px]">
             <CardHeader className="py-3 px-4 border-b bg-gradient-to-r from-primary/5 to-transparent">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -1083,8 +1084,9 @@ export default function TicketDetailPage({
                             {/* Internal badge inline */}
                             {message.is_internal && (
                               <div className="flex items-center gap-1 mb-1.5">
-                                <Badge variant="outline" className="text-[9px] bg-amber-200/60 text-amber-800 border-amber-400/50 px-1.5 py-0">
-                                  🔒 Catatan Internal IT
+                                <Badge variant="outline" className="text-[9px] bg-amber-200/60 text-amber-800 border-amber-400/50 px-1.5 py-0 flex items-center gap-1">
+                                  <Lock className="h-2.5 w-2.5" />
+                                  Catatan Internal IT
                                 </Badge>
                               </div>
                             )}
@@ -1267,7 +1269,8 @@ export default function TicketDetailPage({
                         {...register("internal")}
                         className="rounded border-gray-300"
                       />
-                      🔒 Pesan Internal (hanya staf IT)
+                      <Lock className="h-3 w-3" />
+                      Pesan Internal (hanya staf IT)
                     </label>
                   )}
                 </form>

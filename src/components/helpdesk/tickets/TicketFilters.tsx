@@ -127,15 +127,14 @@ export function TicketFilters({ onFilterChange, showMyTickets = true }: TicketFi
 
         <Select value={priority} onValueChange={setPriority}>
           <SelectTrigger>
-            <SelectValue placeholder="Priority" />
+            <SelectValue placeholder="Prioritas" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Semua Priority</SelectItem>
-            <SelectItem value="4">Very High</SelectItem>
-            <SelectItem value="3">High</SelectItem>
-            <SelectItem value="2">Normal</SelectItem>
-            <SelectItem value="1">Low</SelectItem>
-            <SelectItem value="0">Very Low</SelectItem>
+            <SelectItem value="all">Semua Prioritas</SelectItem>
+            <SelectItem value="4">Mendesak</SelectItem>
+            <SelectItem value="3">Tinggi</SelectItem>
+            <SelectItem value="2">Sedang</SelectItem>
+            <SelectItem value="1">Rendah</SelectItem>
           </SelectContent>
         </Select>
 

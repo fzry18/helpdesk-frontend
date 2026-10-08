@@ -149,7 +149,7 @@ export default function AuditLogsPage() {
                   size="sm"
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page <= 1}
-                  className="h-7 text-xs"
+                  className="h-9 px-3.5 text-xs min-h-[36px]"
                 >
                   Sebelumnya
                 </Button>
@@ -158,7 +158,7 @@ export default function AuditLogsPage() {
                   size="sm"
                   onClick={() => setPage((p) => Math.min(meta.total_pages, p + 1))}
                   disabled={page >= meta.total_pages}
-                  className="h-7 text-xs"
+                  className="h-9 px-3.5 text-xs min-h-[36px]"
                 >
                   Selanjutnya
                 </Button>
